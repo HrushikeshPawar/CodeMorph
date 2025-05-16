@@ -78,24 +78,26 @@ def generate_subgraph_for_node(
     node_id: str,
     logger: lg.Logger,
     upstream_depth: int = 1,
-    downstream_depth: int = 1
+    downstream_depth: Optional[int] = None
 ) -> Optional[nx.DiGraph]:
     """
     Generates a subgraph centered around a specific node, including its upstream
-    dependencies (callers) and downstream dependents (callees) up to specified depths.
+    dependencies (callers) up to a specified depth, and all downstream dependents (callees)
+    to the last possible node by default (unless downstream_depth is set).
 
     Args:
         graph: The NetworkX DiGraph from GraphConstructor.
         node_id: The ID of the central node for the subgraph.
         logger: A Loguru logger instance.
-        upstream_depth: How many levels of callers to include.
-        downstream_depth: How many levels of callees to include.
+        upstream_depth: How many levels of callers to include (default: 1).
+        downstream_depth: How many levels of callees to include. If None (default),
+                         includes all reachable downstream nodes.
 
     Returns:
         A new nx.DiGraph representing the subgraph, or None if the node_id
         is not found or an error occurs.
     """
-    logger.info(f"Generating subgraph for node '{node_id}' (upstream_depth={upstream_depth}, downstream_depth={downstream_depth}).")
+    logger.info(f"Generating subgraph for node '{node_id}' (upstream_depth={upstream_depth}, downstream_depth={'ALL' if downstream_depth is None else downstream_depth}).")
     if not graph:
         logger.warning("Graph is empty or None. Cannot generate subgraph.")
         return None
@@ -105,43 +107,108 @@ def generate_subgraph_for_node(
 
     nodes_for_subgraph: Set[str] = {node_id}
 
-    # Upstream nodes (ancestors/predecessors)
-    # Using BFS-like approach for limited depth
-    current_level_nodes: Set[str] = {node_id}
+    # --- Upstream Traversal (limited by upstream_depth) ---
+    nodes_to_expand_in_current_level: Set[str] = {node_id}
     for i in range(upstream_depth):
-        next_level_nodes: Set[str] = set()
-        if not current_level_nodes: # No more nodes to explore in this direction
+        if not nodes_to_expand_in_current_level:
+            logger.trace(f"Upstream level {i+1} for '{node_id}': no nodes to expand from, stopping traversal.")
             break
-        for n_id in current_level_nodes:
-            # graph.predecessors(n_id) returns an iterator
-            for pred in graph.predecessors(n_id):
-                if pred not in nodes_for_subgraph: # Add only if not already included
-                    next_level_nodes.add(pred)
-        nodes_for_subgraph.update(next_level_nodes)
-        current_level_nodes = next_level_nodes
-        logger.trace(f"Upstream level {i+1} for '{node_id}': added {next_level_nodes if next_level_nodes else 'no new'} nodes.")
 
-    # Downstream nodes (descendants/successors)
-    current_level_nodes = {node_id}
-    for i in range(downstream_depth):
-        next_level_nodes = set()
-        if not current_level_nodes:
+        nodes_discovered_in_this_iteration: Set[str] = set()
+        edges_to_log_for_this_iteration: Set[str] = set()
+
+        # Phase 1: Discover new nodes and the direct edges that led to them
+        for expanding_node in nodes_to_expand_in_current_level:
+            for pred_neighbor in graph.predecessors(expanding_node):
+                if pred_neighbor not in nodes_for_subgraph: # pred_neighbor is genuinely new to the overall subgraph
+                    nodes_discovered_in_this_iteration.add(pred_neighbor)
+                    edges_to_log_for_this_iteration.add(f"{pred_neighbor}->{expanding_node}")
+
+        if not nodes_discovered_in_this_iteration:
+            logger.trace(f"Upstream level {i+1} for '{node_id}': no new nodes discovered.")
+            break # Stop upstream traversal if no new nodes are found
+
+        # Phase 2: Log other relevant edges involving the newly_discovered_in_this_iteration nodes
+        # nodes_for_subgraph at this point contains all nodes found *before* this iteration's discoveries
+        for newly_discovered_node in nodes_discovered_in_this_iteration:
+            # Edges between newly_discovered_node and nodes already in nodes_for_subgraph (before this iteration's update)
+            for node_already_in_subgraph in nodes_for_subgraph:
+                if graph.has_edge(newly_discovered_node, node_already_in_subgraph):
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{node_already_in_subgraph}")
+                if graph.has_edge(node_already_in_subgraph, newly_discovered_node):
+                    edges_to_log_for_this_iteration.add(f"{node_already_in_subgraph}->{newly_discovered_node}")
+            
+            # Edges between newly_discovered_node and OTHER nodes discovered in THIS SAME iteration
+            for another_newly_discovered_node in nodes_discovered_in_this_iteration:
+                if newly_discovered_node == another_newly_discovered_node:
+                    continue
+                if graph.has_edge(newly_discovered_node, another_newly_discovered_node):
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{another_newly_discovered_node}")
+                # The reverse (another_newly_discovered_node -> newly_discovered_node) will be covered
+                # when another_newly_discovered_node is the outer loop variable, if it exists.
+
+        logger.trace(f"Upstream level {i+1} for '{node_id}': added nodes {nodes_discovered_in_this_iteration if nodes_discovered_in_this_iteration else 'none'}.")
+        logger.trace(f"Upstream level {i+1} for '{node_id}': relevant edges for this level {edges_to_log_for_this_iteration if edges_to_log_for_this_iteration else 'none'}.")
+
+        nodes_for_subgraph.update(nodes_discovered_in_this_iteration)
+        nodes_to_expand_in_current_level = nodes_discovered_in_this_iteration
+
+
+    # --- Downstream Traversal (to all reachable nodes if downstream_depth is None) ---
+    nodes_to_expand_in_current_level = {node_id} # Reset for downstream, starting from the original node
+    level = 0
+    while True:
+        if downstream_depth is not None and level >= downstream_depth:
             break
-        for n_id in current_level_nodes:
-            # graph.successors(n_id) returns an iterator
-            for succ in graph.successors(n_id):
-                if succ not in nodes_for_subgraph:
-                    next_level_nodes.add(succ)
-        nodes_for_subgraph.update(next_level_nodes)
-        current_level_nodes = next_level_nodes
-        logger.trace(f"Downstream level {i+1} for '{node_id}': added {next_level_nodes if next_level_nodes else 'no new'} nodes.")
+        if not nodes_to_expand_in_current_level:
+            logger.trace(f"Downstream level {level+1} for '{node_id}': no nodes to expand from, stopping traversal.")
+            break
 
-    if not nodes_for_subgraph: # Should not happen if node_id was valid
+        nodes_discovered_in_this_iteration: Set[str] = set()
+        edges_to_log_for_this_iteration: Set[str] = set()
+
+        # Phase 1: Discover new nodes and the direct edges that led to them
+        for expanding_node in nodes_to_expand_in_current_level:
+            for succ_neighbor in graph.successors(expanding_node):
+                if succ_neighbor not in nodes_for_subgraph: # succ_neighbor is genuinely new to the overall subgraph
+                    nodes_discovered_in_this_iteration.add(succ_neighbor)
+                    edges_to_log_for_this_iteration.add(f"{expanding_node}->{succ_neighbor}")
+        
+        if not nodes_discovered_in_this_iteration:
+            logger.trace(f"Downstream level {level+1} for '{node_id}': no new nodes discovered.")
+            break # Stop downstream traversal if no new nodes are found
+
+        # Phase 2: Log other relevant edges involving the newly_discovered_in_this_iteration nodes
+        # nodes_for_subgraph at this point contains all nodes found *before* this iteration's discoveries (including upstream ones)
+        for newly_discovered_node in nodes_discovered_in_this_iteration:
+            # Edges between newly_discovered_node and nodes already in nodes_for_subgraph (before this iteration's update)
+            for node_already_in_subgraph in nodes_for_subgraph:
+                if graph.has_edge(newly_discovered_node, node_already_in_subgraph):
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{node_already_in_subgraph}")
+                if graph.has_edge(node_already_in_subgraph, newly_discovered_node):
+                    edges_to_log_for_this_iteration.add(f"{node_already_in_subgraph}->{newly_discovered_node}")
+
+            # Edges between newly_discovered_node and OTHER nodes discovered in THIS SAME iteration
+            for another_newly_discovered_node in nodes_discovered_in_this_iteration:
+                if newly_discovered_node == another_newly_discovered_node:
+                    continue
+                if graph.has_edge(newly_discovered_node, another_newly_discovered_node):
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{another_newly_discovered_node}")
+                # The reverse (another_newly_discovered_node -> newly_discovered_node) will be covered
+                # when another_newly_discovered_node is the outer loop variable, if it exists.
+
+        logger.trace(f"Downstream level {level+1} for '{node_id}': added nodes {nodes_discovered_in_this_iteration if nodes_discovered_in_this_iteration else 'none'}.")
+        logger.trace(f"Downstream level {level+1} for '{node_id}': relevant edges for this level {edges_to_log_for_this_iteration if edges_to_log_for_this_iteration else 'none'}.")
+
+        nodes_for_subgraph.update(nodes_discovered_in_this_iteration)
+        nodes_to_expand_in_current_level = nodes_discovered_in_this_iteration
+        level += 1
+
+    if not nodes_for_subgraph:
         logger.warning(f"No nodes identified for subgraph of '{node_id}'. This is unexpected.")
         return None
 
     logger.info(f"Subgraph for '{node_id}' will contain {len(nodes_for_subgraph)} nodes.")
-    
     # Create the subgraph from the original graph, preserving original node/edge attributes
     subgraph: nx.DiGraph = graph.subgraph(nodes_for_subgraph).copy()
     logger.debug(f"Subgraph for '{node_id}' created with {subgraph.number_of_nodes()} nodes and {subgraph.number_of_edges()} edges.")
