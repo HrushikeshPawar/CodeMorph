@@ -261,48 +261,154 @@ def test_find_circular_dependencies_complex_graph(complex_graph, da_test_logger:
 
 # 3. generate_subgraph_for_node
 def test_generate_subgraph_empty_graph(empty_graph, da_test_logger: lg.Logger):
-    assert generate_subgraph_for_node(empty_graph, "A", da_test_logger) is None
+    # Test with an empty graph
+    subgraph = generate_subgraph_for_node(empty_graph, "A", da_test_logger)
+    assert subgraph is None, "Subgraph should be None for an empty graph"
 
 def test_generate_subgraph_node_not_found(simple_graph_no_cycles, da_test_logger: lg.Logger):
-    assert generate_subgraph_for_node(simple_graph_no_cycles, "Z", da_test_logger) is None
+    # Test when the node_id is not in the graph
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "Z", da_test_logger)
+    assert subgraph is None, "Subgraph should be None if node_id is not found"
 
-def test_generate_subgraph_simple_case(simple_graph_no_cycles, da_test_logger: lg.Logger):
-    # Subgraph for B, 1 level up (A), 1 level down (C)
-    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "B", da_test_logger, 1, 1)
+def test_generate_subgraph_default_depths_simple_graph(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Test with default upstream_depth=1 and downstream_depth=None (all downstream)
+    # For simple_graph_no_cycles: A -> B -> C; D (isolated); E -> F
+    # Starting at "A", upstream_depth=0 (only "A" itself), downstream_depth=None
+    # Expected: "A", "B", "C"
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "A", da_test_logger, upstream_depth=0)
     assert subgraph is not None
-    assert set(subgraph.nodes()) == {"A", "B", "C"}
-    assert set(subgraph.edges()) == {("A", "B"), ("B", "C")}
+    expected_nodes = {"A", "B", "C"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("A", "B")
+    assert subgraph.has_edge("B", "C")
+    assert subgraph.number_of_edges() == 2
 
-def test_generate_subgraph_depth_0(simple_graph_no_cycles, da_test_logger: lg.Logger):
-    # Subgraph for B, 0 levels up, 0 levels down
-    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "B", da_test_logger, 0, 0)
+def test_generate_subgraph_default_depths_from_middle_node(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Start at "B": A -> B -> C
+    # upstream_depth=1 (default): "A"
+    # downstream_depth=None (default): "C"
+    # Expected: "A", "B", "C"
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "B", da_test_logger)
     assert subgraph is not None
-    assert set(subgraph.nodes()) == {"B"}
-    assert set(subgraph.edges()) == set()
+    expected_nodes = {"A", "B", "C"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("A", "B")
+    assert subgraph.has_edge("B", "C")
+    assert subgraph.number_of_edges() == 2
 
-def test_generate_subgraph_complex_upstream(complex_graph, da_test_logger: lg.Logger):
-    # Subgraph for C2, upstream_depth=2 (C1, MidA, EntryA), downstream_depth=1 (C3, MidB)
-    subgraph = generate_subgraph_for_node(complex_graph, "C2", da_test_logger, upstream_depth=3, downstream_depth=1)
+def test_generate_subgraph_specific_downstream_depth(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Start at "A": A -> B -> C; (D is isolated); E -> F
+    # upstream_depth=0
+    # downstream_depth=1
+    # Expected: "A", "B" (D is not connected from A, E is a separate chain)
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "A", da_test_logger, upstream_depth=0, downstream_depth=1)
     assert subgraph is not None
-    expected_nodes = {"C2", "C1", "C3", "MidA", "EntryA", "MidB"} # C1->C2, MidA->C1, EntryA->MidA. C2->C3, C2->MidB
-    assert set(subgraph.nodes()) == expected_nodes
+    expected_nodes = {"A", "B"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("A", "B")
+    assert subgraph.number_of_edges() == 1, f"Expected 1 edge, got {subgraph.number_of_edges()}"
+
+
+def test_generate_subgraph_specific_upstream_depth(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Start at "C": A -> B -> C
+    # upstream_depth=1: "B"
+    # downstream_depth=0: "C" itself
+    # Expected: "B", "C"
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "C", da_test_logger, upstream_depth=1, downstream_depth=0)
+    assert subgraph is not None
+    expected_nodes = {"B", "C"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("B", "C")
+    assert subgraph.number_of_edges() == 1
+
+def test_generate_subgraph_full_downstream_complex(complex_graph, da_test_logger: lg.Logger):
+    # complex_graph: EntryA -> MidA -> C1; EntryA -> P1; C1-C2-C3-C1; C2 -> MidB; MidB -> T1; MidB -> P2
+    # Start at "MidA", upstream_depth=1 ("EntryA"), downstream_depth=None (C1, C2, C3, MidB, T1, P2)
+    # Expected nodes: "EntryA", "MidA", "C1", "C2", "C3", "MidB", "T1", "P2"
+    subgraph = generate_subgraph_for_node(complex_graph, "MidA", da_test_logger, upstream_depth=1) # downstream_depth=None by default
+    assert subgraph is not None
+    expected_nodes = {"EntryA", "MidA", "C1", "C2", "C3", "MidB", "T1", "P2"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
     # Check some key edges
-    assert ("C1", "C2") in subgraph.edges()
-    assert ("MidA", "C1") in subgraph.edges()
-    assert ("EntryA", "MidA") in subgraph.edges()
-    assert ("C2", "C3") in subgraph.edges()
-    assert ("C2", "MidB") in subgraph.edges()
-    # assert ("C3", "C1") not in subgraph.edges() # C3 is 1 level down from C2 via C2->C3, but C3->C1 is not part of this specific subgraph path logic from C2 with depth 1 down to C3.
-                                                # The subgraph includes nodes and edges *between them* from original graph.
-                                                # C3->C1 is an edge between nodes in the subgraph.
-    assert ("C3", "C1") in subgraph.edges() # C3 and C1 are in expected_nodes, so edge should be there.
+    assert subgraph.has_edge("EntryA", "MidA")
+    assert subgraph.has_edge("MidA", "C1")
+    assert subgraph.has_edge("C1", "C2")
+    assert subgraph.has_edge("C2", "C3")
+    assert subgraph.has_edge("C3", "C1") # Cycle part
+    assert subgraph.has_edge("C2", "MidB")
+    assert subgraph.has_edge("MidB", "T1")
+    assert subgraph.has_edge("MidB", "P2")
+    assert not subgraph.has_node("P1") # P1 is downstream of EntryA, not MidA for this test.
+    assert not subgraph.has_node("EntryB")
+    assert not subgraph.has_node("Iso")
 
-def test_generate_subgraph_complex_downstream(complex_graph, da_test_logger: lg.Logger):
-    # Subgraph for MidA, upstream_depth=1 (EntryA), downstream_depth=3 (C1, C2, C3, MidB, T1, P2)
-    subgraph = generate_subgraph_for_node(complex_graph, "MidA", da_test_logger, upstream_depth=1, downstream_depth=4)
+
+def test_generate_subgraph_limited_downstream_complex(complex_graph, da_test_logger: lg.Logger):
+    # complex_graph: EntryA -> MidA -> C1; EntryA -> P1; C1-C2-C3-C1; C2 -> MidB; MidB -> T1; MidB -> P2
+    # Start at "EntryA", upstream_depth=0, downstream_depth=1 ("MidA", "P1")
+    # Expected nodes: "EntryA", "MidA", "P1"
+    subgraph = generate_subgraph_for_node(complex_graph, "EntryA", da_test_logger, upstream_depth=0, downstream_depth=1)
     assert subgraph is not None
-    expected_nodes = {"MidA", "EntryA", "C1", "C2", "C3", "MidB", "T1", "P2"}
+    expected_nodes = {"EntryA", "MidA", "P1"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("EntryA", "MidA")
+    assert subgraph.has_edge("EntryA", "P1")
+    assert not subgraph.has_node("C1") # C1 should be excluded by downstream_depth=1 from EntryA
+
+def test_generate_subgraph_zero_upstream_full_downstream(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Start at "A": A -> B -> C; (D is isolated); E -> F
+    # upstream_depth=0
+    # downstream_depth=None (all downstream from A)
+    # Expected: "A", "B", "C"
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "A", da_test_logger, upstream_depth=0, downstream_depth=None)
+    assert subgraph is not None
+    expected_nodes = {"A", "B", "C"}
     assert set(subgraph.nodes()) == expected_nodes
+    assert subgraph.number_of_nodes() == 3
+    assert subgraph.number_of_edges() == 2 # A->B, B->C
+
+def test_generate_subgraph_zero_downstream_full_upstream(graph_with_cycles, da_test_logger: lg.Logger):
+    # graph_with_cycles: A->B, B->C, C->A (cycle A-B-C), A->D, D->E, E->D (cycle D-E)
+    # Start at "D", upstream_depth=5 (simulating all: A, C, B, E), downstream_depth=0
+    # Expected: "A", "B", "C", "D", "E"
+    subgraph = generate_subgraph_for_node(graph_with_cycles, "D", da_test_logger, upstream_depth=5, downstream_depth=0)
+    assert subgraph is not None
+    # A calls D. C calls A. B calls C. E calls D.
+    # So from D, upstream includes A, E, C, B
+    expected_nodes = {"A", "B", "C", "D", "E"}
+    assert set(subgraph.nodes()) == expected_nodes, f"Expected {expected_nodes}, got {set(subgraph.nodes())}"
+    assert subgraph.has_edge("A", "D")
+    assert subgraph.has_edge("E", "D")
+    assert subgraph.has_edge("C", "A")
+    assert subgraph.has_edge("B", "C")
+    assert subgraph.has_edge("A", "B") # This is part of the A-B-C cycle, so it's included
+    # Total edges: A->D, E->D, C->A, B->C, A->B = 5 and # D-> E (cycle)  +1
+    da_test_logger.debug(f"Subgraph edges: {subgraph.edges()}")
+    assert subgraph.number_of_edges() == 5+1
+
+
+def test_generate_subgraph_isolated_node(complex_graph, da_test_logger: lg.Logger):
+    # complex_graph has isolated node "Iso"
+    # Start at "Iso", upstream_depth=1, downstream_depth=None
+    # Expected: "Iso"
+    subgraph = generate_subgraph_for_node(complex_graph, "Iso", da_test_logger, upstream_depth=1, downstream_depth=None)
+    assert subgraph is not None
+    expected_nodes = {"Iso"}
+    assert set(subgraph.nodes()) == expected_nodes
+    assert subgraph.number_of_nodes() == 1
+    assert subgraph.number_of_edges() == 0
+
+def test_generate_subgraph_no_upstream_no_downstream_beyond_node(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Start at "C": A -> B -> C
+    # upstream_depth=0
+    # downstream_depth=0
+    # Expected: "C"
+    subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "C", da_test_logger, upstream_depth=0, downstream_depth=0)
+    assert subgraph is not None
+    expected_nodes = {"C"}
+    assert set(subgraph.nodes()) == expected_nodes
+    assert subgraph.number_of_nodes() == 1
+    assert subgraph.number_of_edges() == 0
 
 
 # 4. find_entry_points (reuses find_unused_objects logic, so tests are similar)
