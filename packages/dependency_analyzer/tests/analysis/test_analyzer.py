@@ -17,7 +17,8 @@ from dependency_analyzer.analysis.analyzer import (
     find_terminal_nodes,
     get_node_degrees,
     find_all_paths,
-    get_connected_components
+    get_connected_components,
+    calculate_node_complexity_metrics
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -553,7 +554,7 @@ def test_get_connected_components_cycles_strongly(graph_with_cycles, da_test_log
     # Cycle A-B-C, Cycle D-E. A->D.
     # So, A,B,C,D,E are all one SCC.
     # F, G, H are separate.
-    # Corrected: SCCs are {A,B,C}, {D,E}, {F}, {G}, {H} if A->D is not there.
+    # Corrected: SCCs are {A,B,C} and {D,E} if A->D is not there.
     # With A->D:
     # A can reach D. D can reach E. E can reach D.
     # C can reach A. B can reach C. A can reach B.
@@ -601,3 +602,132 @@ def test_get_connected_components_complex_weakly(complex_graph, da_test_logger: 
     }
     found_wcc_sets = {frozenset(comp) for comp in wcc}
     assert found_wcc_sets == expected_wcc_sets
+
+
+# 9. calculate_node_complexity_metrics
+def test_calculate_node_complexity_metrics_basic(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(simple_graph_no_cycles, da_test_logger)
+    for node_id, node_data in simple_graph_no_cycles.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # LOC should be >= 1 for default clean_code
+        assert node_data['loc'] >= 1
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
+
+def test_calculate_node_complexity_metrics_edge_cases(empty_graph, da_test_logger: lg.Logger):
+    # Should not raise or fail on empty graph
+    calculate_node_complexity_metrics(empty_graph, da_test_logger)
+    assert len(empty_graph.nodes) == 0
+
+def test_calculate_node_complexity_metrics_complex(complex_graph, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(complex_graph, da_test_logger)
+    for node_id, node_data in complex_graph.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
+
+def test_calculate_node_complexity_metrics_specific_values(da_test_logger: lg.Logger):
+    graph = nx.DiGraph()
+    mock_obj_code = (
+        "IF condition1 THEN\n"
+        "  call_a();\n"
+        "ELSIF condition2 THEN\n"
+        "  call_b();\n"
+        "  call_a(); -- duplicate call\n"
+        "ELSE\n"
+        "  FOR i IN 1..10 LOOP\n"
+        "    call_c();\n"
+        "  END LOOP;\n"
+        "END IF;"
+    )
+    mock_obj_params = [{'name': 'p1', 'type': 'VARCHAR2'}, {'name': 'p2', 'type': 'NUMBER'}]
+    mock_obj_calls = [
+        CallDetailsTuple(call_name='call_a', line_no=2, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_b', line_no=4, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_a', line_no=5, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_c', line_no=8, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+    ]
+    
+    mock_node_obj = MockPLSQLCodeObject(
+        name="TestProc",
+        clean_code=mock_obj_code,
+        parsed_parameters=mock_obj_params,
+        extracted_calls=mock_obj_calls
+    )
+    graph.add_node("TestProcNode", object=mock_node_obj)
+
+    calculate_node_complexity_metrics(graph, da_test_logger)
+    
+    node_data = graph.nodes["TestProcNode"]
+    assert node_data['loc'] == 10
+    assert node_data['num_params'] == 2
+    assert node_data['num_calls_made'] == 3 # unique: call_a, call_b, call_c
+    
+    # This assertion depends on whether 'THEN' is counted in ACC
+    # If THEN is counted: IF, THEN, ELSIF, THEN, FOR, LOOP = 6 keywords. ACC = 6 + 1 = 7
+    # If THEN is NOT counted: IF, ELSIF, FOR, LOOP = 4 keywords. ACC = 4 + 1 = 5
+    expected_acc = 7 # Assuming 'THEN' is counted as per current implementation
+    assert node_data['acc'] == expected_acc, f"ACC mismatch: got {node_data['acc']}, want {expected_acc}"
+
+def test_analyze_metrics_infers_format_and_saves(tmp_path, da_test_logger):
+    import shutil
+    from dependency_analyzer.analysis.analyzer import calculate_node_complexity_metrics
+    from dependency_analyzer.cli import analyze_metrics
+    import networkx as nx
+    import types
+    # Create a test graph and save as .graphml
+    G = nx.DiGraph()
+    G.add_node("A")
+    G.add_node("B")
+    G.add_edge("A", "B")
+    graphml_path = tmp_path / "testgraph.graphml"
+    nx.write_graphml_lxml(G=G, path=graphml_path)
+
+    # Patch analyzer.calculate_node_complexity_metrics to check call
+    called = {}
+    def fake_calc(graph, logger):
+        called['called'] = True
+        assert isinstance(graph, nx.DiGraph)
+    orig_calc = calculate_node_complexity_metrics
+    import dependency_analyzer.analysis.analyzer as analyzer_mod
+    analyzer_mod.calculate_node_complexity_metrics = fake_calc
+
+    # Patch GraphStorage to check format used for load/save
+    from dependency_analyzer.persistence.graph_storage import GraphStorage
+    orig_load_graph = GraphStorage.load_graph
+    orig_save_structure_only = GraphStorage.save_structure_only
+    used_formats = {}
+    def fake_load(self, path, format):
+        used_formats['load'] = format
+        # Return a DiGraph with the expected structure for the test
+        G_loaded = nx.DiGraph()
+        G_loaded.add_node("A", object=None)
+        G_loaded.add_node("B", object=None)
+        G_loaded.add_edge("A", "B")
+        return G_loaded
+    def fake_save(self, graph, path, format):
+        used_formats['save'] = format
+        return True
+    GraphStorage.load_graph = fake_load
+    GraphStorage.save_structure_only = fake_save
+
+    # Call the CLI command (simulate user passing only the file, not format)
+    analyze_metrics(
+        graph_path=graphml_path,
+        graph_format="gpickle",  # default, should be overridden by .graphml
+        verbose_level=0
+    )
+    assert used_formats['load'] == 'graphml'
+    assert used_formats['save'] == 'graphml'
+    assert called['called']
+
+    # Restore
+    analyzer_mod.calculate_node_complexity_metrics = orig_calc
+    GraphStorage.load_graph = orig_load_graph
+    GraphStorage.save_structure_only = orig_save_structure_only

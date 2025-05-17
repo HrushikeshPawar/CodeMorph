@@ -31,6 +31,7 @@ def full_build(
     output_graph_path: Path = Parameter(da_config.GRAPHS_DIR / f"full_dependency_graph_{da_config.TIMESTAMP}.{da_config.DEFAULT_GRAPH_FORMAT}", help="Path to save the generated dependency graph."),
     graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format to save the graph. Options: {da_config.VALID_GRAPH_FORMATS}"),
     save_structure_only: bool = Parameter(True, help="Save only the graph structure without large code objects."),
+    calculate_complexity: bool = Parameter(False, help="Calculate and store complexity metrics for each node."),
     verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3).")
 ):
     """
@@ -38,6 +39,7 @@ def full_build(
     
     When save_structure_only is True (default), only the graph structure (nodes and edges) will be saved
     without the large PLSQL_CodeObject instances, resulting in smaller file sizes and better loading times.
+    If calculate_complexity is True, complexity metrics are calculated and stored as node attributes.
     """
     local_logger = _setup(verbose_level)
     local_logger.info(f"Starting full build. DB: '{db_path}', Output: '{output_graph_path}', Format: '{graph_format}'")
@@ -57,6 +59,10 @@ def full_build(
 
     graph_constructor = GraphConstructor(code_objects, local_logger, verbose=(verbose_level >= 2))
     dependency_graph, out_of_scope_calls = graph_constructor.build_graph()
+
+    if calculate_complexity:
+        analyzer.calculate_node_complexity_metrics(dependency_graph, local_logger)
+        local_logger.info("Complexity metrics calculated and stored in graph nodes.")
 
     local_logger.info(
         f"Graph construction complete. Nodes: {dependency_graph.number_of_nodes()}, Edges: {dependency_graph.number_of_edges()}."
@@ -275,5 +281,44 @@ def visualize(
         local_logger.error(f"Error generating or saving {engine} visualization: {e}", exc_info=True)
     local_logger.info("Visualization finished.")
 
-if __name__ == "__main__": # To make cli.py runnable directly for development
-    app()
+@app.command
+def analyze_metrics(
+    graph_path: Path = Parameter(..., help="Path to the dependency graph file (full or subgraph)."),
+    graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format of the graph file. Options: {da_config.VALID_GRAPH_FORMATS}"),
+    verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3)."),
+):
+    """
+    Calculates and stores complexity metrics for each node in an existing dependency graph file.
+    Metrics include LOC, number of parameters, outgoing calls, and approximate cyclomatic complexity (ACC).
+    The graph is updated in-place and saved back to the same file.
+    """
+    local_logger = _setup(verbose_level)
+    local_logger.info(f"Analyzing metrics for graph '{graph_path}'...")
+
+    if not graph_path.exists():
+        local_logger.critical(f"Graph file not found: {graph_path}")
+        return
+
+    graph_storage = GraphStorage(local_logger)
+
+    # Determine actual format to use for loading
+    actual_load_format = graph_format
+    if graph_format == da_config.DEFAULT_GRAPH_FORMAT:
+        inferred_format_from_ext = graph_path.suffix.lstrip('.').lower()
+        if inferred_format_from_ext and inferred_format_from_ext in da_config.VALID_GRAPH_FORMATS:
+            actual_load_format = inferred_format_from_ext
+            local_logger.info(f"Using inferred format '{actual_load_format}' for loading '{graph_path}'.")
+        else:
+            local_logger.info(f"Using default/specified format '{actual_load_format}' for loading '{graph_path}'.")
+
+    graph = graph_storage.load_graph(graph_path, format=actual_load_format)
+    if not graph:
+        local_logger.error(f"Failed to load graph from '{graph_path}' using format '{actual_load_format}'.")
+        return
+
+    analyzer.calculate_node_complexity_metrics(graph, local_logger)
+    # Save the updated graph using the same format it was loaded with
+    if graph_storage.save_structure_only(graph, graph_path, format=actual_load_format):
+        local_logger.info(f"Metrics calculated and graph updated at '{graph_path}' (format: '{actual_load_format}').")
+    else:
+        local_logger.error(f"Failed to save updated graph with metrics to '{graph_path}' (format: '{actual_load_format}').")

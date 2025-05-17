@@ -2,6 +2,7 @@ from __future__ import annotations
 import networkx as nx
 import loguru as lg # type: ignore
 from typing import List, Dict, Set, Optional, Generator, Tuple
+import re
 
 # Assuming plsql_analyzer is a package accessible in the Python path.
 # This import might be needed if we directly access PLSQL_CodeObject attributes like type.
@@ -415,6 +416,64 @@ def get_connected_components(
     except Exception as e:
         logger.error(f"Error finding {component_type} connected components: {e}", exc_info=True)
         return []
+
+
+def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> None:
+    """
+    Calculates and stores complexity metrics for each PLSQL_CodeObject node in the graph.
+    Metrics:
+        - loc: Lines of Code (LOC) based on clean_code
+        - num_params: Number of parameters (parsed_parameters)
+        - num_calls_made: Number of outgoing calls (unique callees in extracted_calls)
+        - acc: Approximate Cyclomatic Complexity (heuristic based on control flow keywords)
+    Stores metrics as node attributes: 'loc', 'num_params', 'num_calls_made', 'acc'.
+    """
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot calculate complexity metrics.")
+        return
+
+    # Decision-point keywords for ACC (case-insensitive, word boundaries)
+    # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
+    # Python's regex lookbehind must be fixed-width, so we can't use (?<!end\s*)
+    # Instead, match all, then filter out those preceded by 'end' and whitespace in post-processing
+    keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
+    acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
+
+    def is_false_positive(match):
+        # Get up to 10 chars before the match
+        start = match.start()
+        before = obj.clean_code[max(0, start-10):start].lower()
+        # Check for 'end' followed by whitespace right before the keyword
+        return bool(re.search(r'end\s*$', before))
+
+    for node_id, node_data in graph.nodes(data=True):
+        obj = node_data.get('object')
+        if obj is None:
+            logger.warning(f"Node '{node_id}' missing 'object' attribute. Skipping complexity metrics.")
+            continue
+        # LOC
+        loc = len(obj.clean_code.splitlines()) if obj.clean_code else 0
+        # Number of parameters
+        num_params = len(obj.parsed_parameters) if hasattr(obj, 'parsed_parameters') and obj.parsed_parameters else 0
+        # Number of outgoing calls (unique callees)
+        if hasattr(obj, 'extracted_calls') and obj.extracted_calls:
+            unique_callees = set(getattr(call, 'call_name', None) for call in obj.extracted_calls if hasattr(call, 'call_name'))
+            num_calls_made = len(unique_callees)
+        else:
+            num_calls_made = 0
+        # Approximate Cyclomatic Complexity (ACC)
+        if obj.clean_code:
+            matches = list(acc_pattern.finditer(obj.clean_code))
+            acc_count = sum(1 for m in matches if not is_false_positive(m))
+            acc = acc_count + 1
+        else:
+            acc = 1
+        # Store metrics as node attributes
+        graph.nodes[node_id]['loc'] = loc
+        graph.nodes[node_id]['num_params'] = num_params
+        graph.nodes[node_id]['num_calls_made'] = num_calls_made
+        graph.nodes[node_id]['acc'] = acc
+        logger.debug(f"Node '{node_id}': LOC={loc}, Params={num_params}, Calls={num_calls_made}, ACC={acc}")
 
 # --- Example Usage (Illustrative) ---
 if __name__ == '__main__':
