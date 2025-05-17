@@ -18,7 +18,9 @@ from dependency_analyzer.analysis.analyzer import (
     get_node_degrees,
     find_all_paths,
     get_connected_components,
-    calculate_node_complexity_metrics
+    calculate_node_complexity_metrics,
+    get_descendants,  # newly added
+    get_ancestors     # newly added
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -731,3 +733,45 @@ def test_analyze_metrics_infers_format_and_saves(tmp_path, da_test_logger):
     analyzer_mod.calculate_node_complexity_metrics = orig_calc
     GraphStorage.load_graph = orig_load_graph
     GraphStorage.save_structure_only = orig_save_structure_only
+
+def test_get_descendants_and_ancestors_simple(simple_graph_no_cycles):
+    graph = simple_graph_no_cycles
+    # A -> B -> C, D (isolated), E -> F
+    assert get_descendants(graph, "A") == {"B", "C"}
+    assert get_descendants(graph, "B") == {"C"}
+    assert get_descendants(graph, "C") == set()
+    assert get_descendants(graph, "D") == set()
+    assert get_descendants(graph, "E") == {"F"}
+    assert get_descendants(graph, "F") == set()
+    # Depth limit
+    assert get_descendants(graph, "A", depth_limit=1) == {"B"}
+    assert get_descendants(graph, "A", depth_limit=2) == {"B", "C"}
+    # Ancestors
+    assert get_ancestors(graph, "C") == {"A", "B"}
+    assert get_ancestors(graph, "B") == {"A"}
+    assert get_ancestors(graph, "A") == set()
+    assert get_ancestors(graph, "D") == set()
+    assert get_ancestors(graph, "F") == {"E"}
+    # Depth limit
+    assert get_ancestors(graph, "C", depth_limit=1) == {"B"}
+    assert get_ancestors(graph, "C", depth_limit=2) == {"A", "B"}
+    # Node not in graph
+    assert get_descendants(graph, "Z") == set()
+    assert get_ancestors(graph, "Z") == set()
+
+
+def test_get_descendants_and_ancestors_cycles(graph_with_cycles):
+    graph = graph_with_cycles
+    # A-B-C cycle, D-E cycle, F-G-H chain, A->D
+    # Descendants
+    assert get_descendants(graph, "A") == {"B", "C", "D", "E"}
+    assert get_descendants(graph, "D") == {"E"}
+    assert get_descendants(graph, "F") == {"G", "H"}
+    # Ancestors
+    assert get_ancestors(graph, "A") == {"B", "C"}
+    assert get_ancestors(graph, "D") == {"A", "E", "B", "C"}
+    assert get_ancestors(graph, "H") == {"F", "G"}
+    # Depth limit
+    assert get_descendants(graph, "A", depth_limit=1) == {"B", "D"}
+    # C is also within 2 steps upstream of D: D<-E<-D<-A<-B<-C (cycle)
+    assert get_ancestors(graph, "D", depth_limit=2) == {"A", "E", "C"}

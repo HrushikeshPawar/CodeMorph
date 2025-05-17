@@ -322,3 +322,54 @@ def analyze_metrics(
         local_logger.info(f"Metrics calculated and graph updated at '{graph_path}' (format: '{actual_load_format}').")
     else:
         local_logger.error(f"Failed to save updated graph with metrics to '{graph_path}' (format: '{actual_load_format}').")
+
+@app.command
+def analyze_reachability(
+    graph_path: Path = Parameter(..., help="Path to the dependency graph file (full or subgraph)."),
+    node_id: str = Parameter(..., help="Node ID to analyze reachability for."),
+    downstream: bool = Parameter(True, help="Show descendants (downstream reachability)."),
+    upstream: bool = Parameter(True, help="Show ancestors (upstream reachability)."),
+    depth: Optional[int] = Parameter(None, help="Optional depth limit for traversal."),
+    graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format of the graph file. Options: {da_config.VALID_GRAPH_FORMATS}"),
+    verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3)."),
+):
+    """
+    Analyze reachability for a given node in the dependency graph.
+    Reports all descendants (downstream) and/or ancestors (upstream) of the node, with optional depth limit.
+    """
+    local_logger = _setup(verbose_level)
+    local_logger.info(f"Analyzing reachability for node '{node_id}' in '{graph_path}' (downstream={downstream}, upstream={upstream}, depth={depth})")
+
+    if not graph_path.exists():
+        local_logger.critical(f"Graph file not found: {graph_path}")
+        return
+
+    graph_storage = GraphStorage(local_logger)
+    actual_load_format = graph_format
+    if graph_format == da_config.DEFAULT_GRAPH_FORMAT:
+        inferred_format_from_ext = graph_path.suffix.lstrip('.').lower()
+        if inferred_format_from_ext and inferred_format_from_ext in da_config.VALID_GRAPH_FORMATS:
+            actual_load_format = inferred_format_from_ext
+            local_logger.info(f"Using inferred format '{actual_load_format}' for loading '{graph_path}'.")
+        else:
+            local_logger.info(f"Using default/specified format '{actual_load_format}' for loading '{graph_path}'.")
+
+    graph = graph_storage.load_graph(graph_path, format=actual_load_format)
+    if not graph:
+        local_logger.error(f"Failed to load graph from '{graph_path}' using format '{actual_load_format}'.")
+        return
+
+    if node_id not in graph:
+        local_logger.error(f"Node '{node_id}' not found in the loaded graph.")
+        return
+
+    if downstream:
+        descendants = analyzer.get_descendants(graph, node_id, depth_limit=depth)
+        result_message = f"Descendants (downstream) of '{node_id}' (depth_limit={depth}): {sorted(descendants) if descendants else 'None'}"
+        local_logger.info(result_message)
+        print(result_message)
+    if upstream:
+        ancestors = analyzer.get_ancestors(graph, node_id, depth_limit=depth)
+        result_message = f"Ancestors (upstream) of '{node_id}' (depth_limit={depth}): {sorted(ancestors) if ancestors else 'None'}"
+        local_logger.info(result_message)
+        print(result_message)
