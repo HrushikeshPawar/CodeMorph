@@ -19,8 +19,9 @@ from dependency_analyzer.analysis.analyzer import (
     find_all_paths,
     get_connected_components,
     calculate_node_complexity_metrics,
-    get_descendants,  # newly added
-    get_ancestors     # newly added
+    get_descendants,
+    get_ancestors,
+    trace_downstream_paths
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -514,9 +515,7 @@ def test_find_all_paths_with_cycles_and_cutoff(graph_with_cycles, da_test_logger
     # Test cutoff
     # A -> B -> C. Length 3 (2 edges). Cutoff 2 means max 2 edges.
     paths_A_C_cutoff2 = find_all_paths(graph_with_cycles, "A", "C", da_test_logger, cutoff=1)
-    assert paths_A_C_cutoff2 == [] # Path A-B-C has length 3 (nodes), 2 edges. Cutoff is path length (edges).
-                                    # Networkx cutoff is path length (number of edges).
-                                    # A->B->C has length 2. Cutoff 1 should yield no path.
+    assert paths_A_C_cutoff2 == [] # Path A-B-C has length 3 (nodes), 2 edges. Cutoff 1 should yield no path.
     paths_A_C_cutoff3 = find_all_paths(graph_with_cycles, "A", "C", da_test_logger, cutoff=2)
     assert paths_A_C_cutoff3 == [["A", "B", "C"]]
 
@@ -530,6 +529,49 @@ def test_find_all_paths_complex_multiple_paths(complex_graph, da_test_logger: lg
     # Convert to set of tuples for order-independent comparison of paths
     assert {tuple(p) for p in paths} == {tuple(ep) for ep in expected_paths}
 
+
+# 7b. trace_downstream_paths
+def test_trace_downstream_paths_to_target(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Graph: A -> B -> C, D, E -> F
+    # Paths from A to C: [["A", "B", "C"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, target_node="C")
+    assert paths == [["A", "B", "C"]]
+
+def test_trace_downstream_paths_depth_limit(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Paths from A, depth_limit=1: [["A", "B"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, depth_limit=1)
+    assert paths == [["A", "B"]]
+    # Paths from A, depth_limit=2: [["A", "B"], ["A", "B", "C"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, depth_limit=2)
+    assert sorted(paths) == sorted([["A", "B"], ["A", "B", "C"]])
+
+def test_trace_downstream_paths_no_target_all_paths(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # All simple paths from E: [["E", "F"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "E", da_test_logger)
+    assert paths == [["E", "F"]]
+    # All simple paths from D: [] (no outgoing edges)
+    paths = trace_downstream_paths(simple_graph_no_cycles, "D", da_test_logger)
+    assert paths == []
+
+def test_trace_downstream_paths_cycles(graph_with_cycles, da_test_logger: lg.Logger):
+    # A -> B -> C -> A (cycle), A -> D -> E -> D (cycle)
+    # All simple paths from A, depth_limit=3
+    paths = trace_downstream_paths(graph_with_cycles, "A", da_test_logger, depth_limit=3)
+    # Should include ["A", "B"], ["A", "B", "C"], ["A", "D"], ["A", "D", "E"]
+    expected = [["A", "B"], ["A", "B", "C"], ["A", "D"], ["A", "D", "E"]]
+    assert sorted(paths) == sorted(expected)
+
+def test_trace_downstream_paths_invalid_nodes(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Source node not in graph
+    paths = trace_downstream_paths(simple_graph_no_cycles, "Z", da_test_logger)
+    assert paths == []
+    # Target node not in graph
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, target_node="Z")
+    assert paths == []
+
+def test_trace_downstream_paths_empty_graph(empty_graph, da_test_logger: lg.Logger):
+    paths = trace_downstream_paths(empty_graph, "A", da_test_logger)
+    assert paths == []
 
 # 8. get_connected_components
 def test_get_connected_components_empty_graph(empty_graph, da_test_logger: lg.Logger):

@@ -515,6 +515,65 @@ def get_ancestors(graph: nx.DiGraph, target_node: str, depth_limit: Optional[int
         return nx.ancestors(graph, target_node)
     # Use reversed graph for upstream traversal
     return set(nx.bfs_tree(graph.reverse(copy=False), target_node, depth_limit=depth_limit).nodes()) - {target_node}
+def trace_downstream_paths(
+    graph: nx.DiGraph,
+    source_node: str,
+    logger: lg.Logger,
+    depth_limit: Optional[int] = None,
+    target_node: Optional[str] = None
+) -> List[List[str]]:
+    """
+    Trace all simple execution paths downstream from a selected node in the dependency graph.
+    Paths can be limited by depth or traced to a specific target node.
+
+    Args:
+        graph: The NetworkX DiGraph representing dependencies.
+        source_node: The node from which to start tracing.
+        logger: A Loguru logger instance.
+        depth_limit: Optional maximum path length (number of edges).
+        target_node: Optional target node to trace paths to.
+
+    Returns:
+        A list of paths (each path is a list of node IDs). Returns an empty list if no paths found or nodes are missing.
+    """
+    logger.info(f"Tracing downstream paths from '{source_node}' (depth_limit={depth_limit}, target_node={target_node})...")
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot trace downstream paths.")
+        return []
+    if source_node not in graph:
+        logger.warning(f"Source node '{source_node}' not found in graph.")
+        return []
+    if target_node is not None and target_node not in graph:
+        logger.warning(f"Target node '{target_node}' not found in graph.")
+        return []
+
+    try:
+        if target_node:
+            # Use all_simple_paths with cutoff if provided
+            logger.debug(f"Tracing all simple paths from '{source_node}' to '{target_node}' (cutoff={depth_limit})...")
+            paths = list(nx.all_simple_paths(graph, source=source_node, target=target_node, cutoff=depth_limit))
+            logger.info(f"Found {len(paths)} paths from '{source_node}' to '{target_node}'.")
+            return paths
+        else:
+            # No target: find all simple paths from source to all reachable nodes (up to depth_limit)
+            # Use DFS to enumerate all simple paths up to depth_limit (path length = number of edges)
+            def dfs(current_path: List[str], depth: int):
+                current_node = current_path[-1]
+                if depth_limit is not None and depth >= depth_limit:
+                    return
+                for neighbor in graph.successors(current_node):
+                    if neighbor in current_path:
+                        continue  # avoid cycles
+                    new_path = current_path + [neighbor]
+                    paths_found.append(new_path)
+                    dfs(new_path, depth + 1)
+            paths_found: List[List[str]] = []
+            dfs([source_node], 0)
+            logger.info(f"Found {len(paths_found)} downstream paths from '{source_node}'.")
+            return paths_found
+    except Exception as e:
+        logger.error(f"Error tracing downstream paths from '{source_node}': {e}", exc_info=True)
+        return []
 
 # --- Example Usage (Illustrative) ---
 if __name__ == '__main__':
@@ -672,5 +731,22 @@ if __name__ == '__main__':
     example_logger.info(f"Weakly Connected Components ({len(wcc)}):")
     for i, comp in enumerate(wcc):
         example_logger.info(f"  WCC {i+1}: {comp}")
+
+    # --- Test trace_downstream_paths ---
+    example_logger.info("\\n--- Testing trace_downstream_paths ---")
+    traced_paths_A = trace_downstream_paths(mock_graph, "pkg.procA", example_logger, depth_limit=2)
+    # From pkg.procA, within 2 steps: to pkg.procB, pkg.procC, standalone_func
+    # Paths: [['pkg.procA', 'pkg.procB'], ['pkg.procA', 'pkg.procB', 'pkg.procC']]
+    example_logger.info(f"Traced downstream paths from 'pkg.procA' (depth 2): {traced_paths_A}")
+
+    traced_paths_standalone = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=2)
+    # From standalone_func, within 2 steps: to pkg.procA, util.helper
+    # Paths: [['standalone_func', 'pkg.procA'], ['standalone_func', 'pkg.procA', 'pkg.procB'], ['standalone_func', 'util.helper'], ['standalone_func', 'util.helper', 'external.api']]
+    example_logger.info(f"Traced downstream paths from 'standalone_func' (depth 2): {traced_paths_standalone}")
+
+    traced_paths_to_external = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=3, target_node="external.api")
+    # From standalone_func to external.api, within 3 steps: util.helper -> external.api
+    # Paths: [['standalone_func', 'util.helper', 'external.api']]
+    example_logger.info(f"Traced downstream paths to 'external.api' from 'standalone_func' (depth 3): {traced_paths_to_external}")
 
     example_logger.info("\\nAnalyzer example finished.")
