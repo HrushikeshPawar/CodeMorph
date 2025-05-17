@@ -574,6 +574,89 @@ def trace_downstream_paths(
     except Exception as e:
         logger.error(f"Error tracing downstream paths from '{source_node}': {e}", exc_info=True)
         return []
+def classify_nodes(
+    graph: nx.DiGraph,
+    logger: lg.Logger,
+    complexity_metrics_available: bool = False,
+    hub_degree_percentile: float = 0.95,
+    hub_betweenness_percentile: float = 0.95,
+    hub_pagerank_percentile: float = 0.95,
+    utility_out_degree_percentile: float = 0.90,
+    utility_max_complexity: int = 50,
+    orphan_component_max_size: int = 4
+) -> None:
+    """
+    Classifies nodes in the dependency graph into architectural roles: Hubs, Utilities, Orphans, etc.
+    Adds a 'node_role' attribute (list of roles) to each node.
+
+    Args:
+        graph: The NetworkX DiGraph to classify.
+        logger: A Loguru logger instance.
+        complexity_metrics_available: If True, use node complexity for utility classification.
+        hub_degree_percentile: Percentile for degree threshold (default: 95th).
+        hub_betweenness_percentile: Percentile for betweenness threshold (default: 95th).
+        hub_pagerank_percentile: Percentile for PageRank threshold (default: 95th).
+        utility_out_degree_percentile: Percentile for utility out-degree (default: 90th).
+        utility_max_complexity: Max complexity for utility nodes (if available).
+        orphan_component_max_size: Max size for a component to be considered orphaned.
+    """
+    import numpy as np
+    logger.info("Classifying nodes by architectural role...")
+    # --- Degree metrics ---
+    degrees = dict(graph.degree())
+    in_degrees = dict(graph.in_degree())
+    out_degrees = dict(graph.out_degree())
+    # --- Centrality metrics ---
+    betweenness = nx.betweenness_centrality(graph, normalized=True)
+    pagerank = nx.pagerank(graph)
+    # --- Connected components ---
+    wccs = list(nx.weakly_connected_components(graph))
+    largest_wcc = max(wccs, key=len) if wccs else set()
+    # --- Thresholds (percentile-based) ---
+    degree_values = np.array(list(degrees.values()))
+    betweenness_values = np.array(list(betweenness.values()))
+    pagerank_values = np.array(list(pagerank.values()))
+    out_degree_values = np.array(list(out_degrees.values()))
+    hub_degree_thresh = np.percentile(degree_values, hub_degree_percentile * 100)
+    hub_betweenness_thresh = np.percentile(betweenness_values, hub_betweenness_percentile * 100)
+    hub_pagerank_thresh = np.percentile(pagerank_values, hub_pagerank_percentile * 100)
+    utility_out_degree_thresh = np.percentile(out_degree_values, utility_out_degree_percentile * 100)
+    # --- Complexity metrics (if available) ---
+    node_complexity = {}
+    if complexity_metrics_available:
+        for node_id, data in graph.nodes(data=True):
+            node_complexity[node_id] = data.get('loc', 0)  # Use 'loc' as a proxy
+    # --- Assign roles ---
+    for node_id in graph.nodes():
+        roles = []
+        # Hubs/connectors
+        if (
+            degrees[node_id] >= hub_degree_thresh or
+            betweenness[node_id] >= hub_betweenness_thresh or
+            pagerank[node_id] >= hub_pagerank_thresh
+        ):
+            roles.append('hub')
+        # Utility nodes
+        if out_degrees[node_id] >= utility_out_degree_thresh:
+            if complexity_metrics_available:
+                if node_complexity.get(node_id, 0) <= utility_max_complexity:
+                    roles.append('utility')
+            else:
+                roles.append('utility')
+        # Orphaned component members
+        for comp in wccs:
+            if node_id in comp and len(comp) <= orphan_component_max_size and comp != largest_wcc:
+                roles.append('orphan_component_member')
+                break
+        # Entry/terminal points (reuse existing logic)
+        if in_degrees[node_id] == 0:
+            roles.append('entry_point')
+        if out_degrees[node_id] == 0:
+            roles.append('terminal_node')
+        graph.nodes[node_id]['node_role'] = roles
+        logger.debug(f"Node {node_id}: roles={roles}")
+    logger.info("Node classification complete.")
+
 
 # --- Example Usage (Illustrative) ---
 if __name__ == '__main__':

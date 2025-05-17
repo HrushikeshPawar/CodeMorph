@@ -373,3 +373,31 @@ def analyze_reachability(
         result_message = f"Ancestors (upstream) of '{node_id}' (depth_limit={depth}): {sorted(ancestors) if ancestors else 'None'}"
         local_logger.info(result_message)
         print(result_message)
+def classify(
+    graph_path: Path = Parameter(..., help="Path to the dependency graph file to classify."),
+    with_complexity: bool = Parameter(False, help="Use complexity metrics for utility node classification if available."),
+    graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format of the graph file. Options: {da_config.VALID_GRAPH_FORMATS}"),
+    verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3).")
+):
+    """
+    Classifies nodes in the dependency graph into architectural roles (hubs, utilities, orphans, etc.).
+    Updates the graph file in-place with new node attributes.
+    """
+    local_logger = _setup(verbose_level)
+    local_logger.info(f"Classifying nodes in graph: {graph_path}")
+    if not graph_path.exists():
+        local_logger.critical(f"Graph file not found: {graph_path}")
+        return
+    graph_storage = GraphStorage(local_logger)
+    graph = graph_storage.load_graph(graph_path, format=Path(graph_path).suffix.lstrip('.'))
+    if not graph:
+        local_logger.error(f"Failed to load graph from '{graph_path}'.")
+        return
+    analyzer.classify_nodes(graph, local_logger, complexity_metrics_available=with_complexity)
+    if graph_storage.save_structure_only(graph, graph_path, format=graph_format):
+        local_logger.info(f"Graph classified and saved to {graph_path}")
+    else:
+        local_logger.error(f"Failed to save classified graph to {graph_path}")
+
+if __name__ == "__main__": # To make cli.py runnable directly for development
+    app()
