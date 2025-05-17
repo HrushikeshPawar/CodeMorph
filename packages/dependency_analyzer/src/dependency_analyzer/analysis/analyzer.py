@@ -736,12 +736,12 @@ if __name__ == '__main__':
     example_logger.info("\\n--- Testing trace_downstream_paths ---")
     traced_paths_A = trace_downstream_paths(mock_graph, "pkg.procA", example_logger, depth_limit=2)
     # From pkg.procA, within 2 steps: to pkg.procB, pkg.procC, standalone_func
-    # Paths: [['pkg.procA', 'pkg.procB'], ['pkg.procA', 'pkg.procC'], ['pkg.procA', 'standalone_func']]
+    # Paths: [['pkg.procA', 'pkg.procB'], ['pkg.procA', 'pkg.procB', 'pkg.procC']]
     example_logger.info(f"Traced downstream paths from 'pkg.procA' (depth 2): {traced_paths_A}")
 
     traced_paths_standalone = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=2)
     # From standalone_func, within 2 steps: to pkg.procA, util.helper
-    # Paths: [['standalone_func', 'pkg.procA'], ['standalone_func', 'util.helper']]
+    # Paths: [['standalone_func', 'pkg.procA'], ['standalone_func', 'pkg.procA', 'pkg.procB'], ['standalone_func', 'util.helper'], ['standalone_func', 'util.helper', 'external.api']]
     example_logger.info(f"Traced downstream paths from 'standalone_func' (depth 2): {traced_paths_standalone}")
 
     traced_paths_to_external = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=3, target_node="external.api")
