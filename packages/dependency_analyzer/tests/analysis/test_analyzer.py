@@ -17,7 +17,8 @@ from dependency_analyzer.analysis.analyzer import (
     find_terminal_nodes,
     get_node_degrees,
     find_all_paths,
-    get_connected_components
+    get_connected_components,
+    calculate_node_complexity_metrics
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -553,7 +554,7 @@ def test_get_connected_components_cycles_strongly(graph_with_cycles, da_test_log
     # Cycle A-B-C, Cycle D-E. A->D.
     # So, A,B,C,D,E are all one SCC.
     # F, G, H are separate.
-    # Corrected: SCCs are {A,B,C}, {D,E}, {F}, {G}, {H} if A->D is not there.
+    # Corrected: SCCs are {A,B,C} and {D,E} if A->D is not there.
     # With A->D:
     # A can reach D. D can reach E. E can reach D.
     # C can reach A. B can reach C. A can reach B.
@@ -601,3 +602,32 @@ def test_get_connected_components_complex_weakly(complex_graph, da_test_logger: 
     }
     found_wcc_sets = {frozenset(comp) for comp in wcc}
     assert found_wcc_sets == expected_wcc_sets
+
+
+# 9. calculate_node_complexity_metrics
+def test_calculate_node_complexity_metrics_basic(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(simple_graph_no_cycles, da_test_logger)
+    for node_id, node_data in simple_graph_no_cycles.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # LOC should be >= 1 for default clean_code
+        assert node_data['loc'] >= 1
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
+
+def test_calculate_node_complexity_metrics_edge_cases(empty_graph, da_test_logger: lg.Logger):
+    # Should not raise or fail on empty graph
+    calculate_node_complexity_metrics(empty_graph, da_test_logger)
+    assert len(empty_graph.nodes) == 0
+
+def test_calculate_node_complexity_metrics_complex(complex_graph, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(complex_graph, da_test_logger)
+    for node_id, node_data in complex_graph.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
