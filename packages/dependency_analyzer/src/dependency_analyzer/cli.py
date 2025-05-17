@@ -5,7 +5,7 @@ from typing import Optional
 
 import cyclopts
 from cyclopts import Parameter
-from loguru import logger
+# from loguru import logger
 
 from dependency_analyzer import config as da_config
 from dependency_analyzer.utils.logging_setup import configure_logger
@@ -30,10 +30,14 @@ def full_build(
     db_path: Path = Parameter(da_config.DATABASE_PATH, help="Path to the PL/SQL analyzer SQLite database."),
     output_graph_path: Path = Parameter(da_config.GRAPHS_DIR / f"full_dependency_graph_{da_config.TIMESTAMP}.{da_config.DEFAULT_GRAPH_FORMAT}", help="Path to save the generated dependency graph."),
     graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format to save the graph. Options: {da_config.VALID_GRAPH_FORMATS}"),
+    save_structure_only: bool = Parameter(True, help="Save only the graph structure without large code objects."),
     verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3).")
 ):
     """
     Builds a full dependency graph from the database and saves it.
+    
+    When save_structure_only is True (default), only the graph structure (nodes and edges) will be saved
+    without the large PLSQL_CodeObject instances, resulting in smaller file sizes and better loading times.
     """
     local_logger = _setup(verbose_level)
     local_logger.info(f"Starting full build. DB: '{db_path}', Output: '{output_graph_path}', Format: '{graph_format}'")
@@ -61,10 +65,20 @@ def full_build(
         local_logger.warning(f"Encountered {len(out_of_scope_calls)} out-of-scope calls.")
 
     graph_storage = GraphStorage(local_logger)
-    if graph_storage.save_graph(dependency_graph, output_graph_path, format=graph_format):
-        local_logger.info(f"Graph saved successfully to {output_graph_path}")
+    
+    # Use save_structure_only if requested (default), otherwise use the full save_graph
+    if save_structure_only:
+        if graph_storage.save_structure_only(dependency_graph, output_graph_path, format=graph_format):
+            local_logger.info(f"Graph structure saved successfully to {output_graph_path}")
+        else:
+            local_logger.error(f"Failed to save graph structure to {output_graph_path}")
     else:
-        local_logger.error(f"Failed to save graph to {output_graph_path}")
+        # Legacy mode - save the full graph including large code objects
+        if graph_storage.save_graph(dependency_graph, output_graph_path, format=graph_format):
+            local_logger.info(f"Full graph saved successfully to {output_graph_path}")
+        else:
+            local_logger.error(f"Failed to save full graph to {output_graph_path}")
+            
     local_logger.info("Full build finished.")
 
 @app.command
@@ -74,11 +88,18 @@ def create_subgraph(
     output_subgraph_path: Path = Parameter(..., help="Path to save the generated subgraph."),
     graph_format: str = Parameter(da_config.DEFAULT_GRAPH_FORMAT, help=f"Format to save the subgraph. Options: {da_config.VALID_GRAPH_FORMATS}"),
     upstream_depth: int = Parameter(0, help="How many levels of callers (upstream) to include."),
-    downstream_depth: int = Parameter(999, help="How many levels of callees (downstream) to include (default: full)."), # 999 as a proxy for "all"
+    downstream_depth: Optional[int] = Parameter(None, help="How many levels of callees (downstream) to include (default: all reachable nodes)."),
+    save_structure_only: bool = Parameter(True, help="Save only the graph structure without large code objects."),
+    load_with_objects: bool = Parameter(False, help="Load the graph with code objects from database (use when input is structure-only)."),
+    db_path: Optional[Path] = Parameter(None, help="Path to the PL/SQL analyzer SQLite database (required if load_with_objects=True)."),
     verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3).")
 ):
     """
     Creates a subgraph from a given node in a larger graph and saves it.
+    
+    This function can work with both full graphs and structure-only graphs:
+    - For structure-only input graphs, use load_with_objects=True to populate with code objects from database
+    - When save_structure_only=True, the output subgraph will contain only the essential structure
     """
     local_logger = _setup(verbose_level)
     local_logger.info(f"Creating subgraph for node '{node_id}' from '{input_graph_path}'. Output: '{output_subgraph_path}'")
@@ -88,29 +109,63 @@ def create_subgraph(
         return
 
     graph_storage = GraphStorage(local_logger)
-    full_graph = graph_storage.load_graph(input_graph_path, format=Path(input_graph_path).suffix.lstrip('.')) # Infer format from extension
+    
+    if load_with_objects:
+        # If loading with objects, we need a database path
+        if not db_path:
+            local_logger.critical("Database path required when load_with_objects=True. Cannot proceed.")
+            return
+        
+        if not db_path.exists():
+            local_logger.critical(f"Database file not found at {db_path}. Cannot proceed.")
+            return
+        
+        # Setup database loading
+        db_manager = DatabaseManager(db_path, local_logger)
+        loader = DatabaseLoader(db_manager, local_logger)
+        
+        # Load structure and populate with objects
+        local_logger.info(f"Loading graph structure from {input_graph_path} and populating with objects from database...")
+        full_graph = graph_storage.load_and_populate(
+            input_graph_path, 
+            loader,
+            format=Path(input_graph_path).suffix.lstrip('.')
+        )
+    else:
+        # Regular loading without populating from database
+        full_graph = graph_storage.load_graph(
+            input_graph_path, 
+            format=Path(input_graph_path).suffix.lstrip('.')
+        )
 
     if not full_graph:
-        local_logger.error(f"Failed to load graph from {input_graph_path}")
+        local_logger.error(f"Failed to load graph from '{input_graph_path}'.")
         return
 
     if node_id not in full_graph:
-        local_logger.error(f"Node ID '{node_id}' not found in the loaded graph.")
+        local_logger.error(f"Node '{node_id}' not found in the loaded graph.")
         return
 
+    # Use downstream_depth=None as default for 'all reachable nodes' if not specified
     subgraph = analyzer.generate_subgraph_for_node(
         full_graph, node_id, local_logger, upstream_depth, downstream_depth
     )
-
-    if subgraph and subgraph.number_of_nodes() > 0:
-        if graph_storage.save_graph(subgraph, output_subgraph_path, format=graph_format):
-            local_logger.info(f"Subgraph saved successfully to {output_subgraph_path}")
+    if subgraph is None:
+        local_logger.error(f"Failed to generate subgraph for node '{node_id}'.")
+        return
+    
+    # Save using the appropriate method based on user preference
+    if save_structure_only:
+        if graph_storage.save_structure_only(subgraph, output_subgraph_path, format=graph_format):
+            local_logger.info(f"Subgraph structure saved to '{output_subgraph_path}'.")
         else:
-            local_logger.error(f"Failed to save subgraph to {output_subgraph_path}")
-    elif subgraph: # Empty subgraph
-        local_logger.info(f"Generated subgraph for '{node_id}' is empty. Nothing to save.")
+            local_logger.error(f"Failed to save subgraph structure to '{output_subgraph_path}'.")
     else:
-        local_logger.error(f"Failed to generate subgraph for '{node_id}'.")
+        if graph_storage.save_graph(subgraph, output_subgraph_path, format=graph_format):
+            local_logger.info(f"Full subgraph saved to '{output_subgraph_path}'.")
+        else:
+            local_logger.error(f"Failed to save full subgraph to '{output_subgraph_path}'.")
+            
     local_logger.info("Subgraph creation finished.")
 
 @app.command
@@ -120,10 +175,16 @@ def visualize(
     engine: str = Parameter(da_config.DEFAULT_VISUALIZATION_ENGINE, help="Visualization engine: 'graphviz' or 'pyvis'."),
     with_package_name_labels: bool = Parameter(True, help="Include package names in node labels."),
     title: Optional[str] = Parameter(None, help="Optional title for the visualization."),
+    load_with_objects: bool = Parameter(False, help="Load the graph with code objects from database (use when input is structure-only)."),
+    db_path: Optional[Path] = Parameter(None, help="Path to the PL/SQL analyzer SQLite database (required if load_with_objects=True)."),
     verbose_level: int = Parameter(da_config.LOG_VERBOSE_LEVEL, help="Logging verbosity (0-3).")
 ):
     """
     Generates a visualization of a given graph file.
+    
+    This function can work with both full graphs and structure-only graphs:
+    - For structure-only input graphs, use load_with_objects=True to populate with code objects from database
+      before visualization if you need the detailed object information.
     """
     local_logger = _setup(verbose_level)
     local_logger.info(f"Visualizing graph '{input_graph_path}' using '{engine}'. Output base: '{output_base_path}'")
@@ -133,7 +194,34 @@ def visualize(
         return
 
     graph_storage = GraphStorage(local_logger)
-    graph_to_viz = graph_storage.load_graph(input_graph_path, format=Path(input_graph_path).suffix.lstrip('.'))
+    
+    if load_with_objects:
+        # If loading with objects, we need a database path
+        if not db_path:
+            local_logger.critical("Database path required when load_with_objects=True. Cannot proceed.")
+            return
+        
+        if not db_path.exists():
+            local_logger.critical(f"Database file not found at {db_path}. Cannot proceed.")
+            return
+        
+        # Setup database loading
+        db_manager = DatabaseManager(db_path, local_logger)
+        loader = DatabaseLoader(db_manager, local_logger)
+        
+        # Load structure and populate with objects
+        local_logger.info(f"Loading graph structure from {input_graph_path} and populating with objects from database...")
+        graph_to_viz = graph_storage.load_and_populate(
+            input_graph_path, 
+            loader,
+            format=Path(input_graph_path).suffix.lstrip('.')
+        )
+    else:
+        # Regular loading without populating from database
+        graph_to_viz = graph_storage.load_graph(
+            input_graph_path, 
+            format=Path(input_graph_path).suffix.lstrip('.')
+        )
 
     if not graph_to_viz:
         local_logger.error(f"Failed to load graph from {input_graph_path} for visualization.")
@@ -150,8 +238,7 @@ def visualize(
             viz_graph = exporter.to_graphviz(
                 graph_to_viz,
                 local_logger,
-                with_package_name=with_package_name_labels,
-                package_colors=da_config.PACKAGE_COLORS_DEFAULT
+                with_package_name=with_package_name_labels
             )
             if title:
                 viz_graph.attr(label=title, labelloc="t", fontsize="20")
@@ -175,7 +262,6 @@ def visualize(
                 graph_to_viz,
                 local_logger,
                 with_package_name=with_package_name_labels,
-                package_colors=da_config.PACKAGE_COLORS_DEFAULT,
                 pyvis_kwargs={'height': '800px', 'width': '100%', 'heading': title or output_base_path.name}
             )
             output_path_html = output_base_path.with_suffix(".html")
