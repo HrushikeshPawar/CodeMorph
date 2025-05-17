@@ -475,6 +475,47 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
         graph.nodes[node_id]['acc'] = acc
         logger.debug(f"Node '{node_id}': LOC={loc}, Params={num_params}, Calls={num_calls_made}, ACC={acc}")
 
+def get_descendants(graph: nx.DiGraph, source_node: str, depth_limit: Optional[int] = None) -> Set[str]:
+    """
+    Returns the set of all descendant nodes (reachable from source_node) in the graph.
+    If depth_limit is None, returns all descendants. Otherwise, limits traversal depth.
+
+    Args:
+        graph: The NetworkX DiGraph.
+        source_node: The node from which to find descendants.
+        depth_limit: Optional maximum depth for traversal.
+
+    Returns:
+        Set of descendant node IDs (excluding source_node itself).
+    """
+    if source_node not in graph:
+        return set()
+    if depth_limit is None:
+        return nx.descendants(graph, source_node)
+    # BFS tree includes the source node, so remove it
+    return set(nx.bfs_tree(graph, source_node, depth_limit=depth_limit).nodes()) - {source_node}
+
+
+def get_ancestors(graph: nx.DiGraph, target_node: str, depth_limit: Optional[int] = None) -> Set[str]:
+    """
+    Returns the set of all ancestor nodes (can reach target_node) in the graph.
+    If depth_limit is None, returns all ancestors. Otherwise, limits traversal depth.
+
+    Args:
+        graph: The NetworkX DiGraph.
+        target_node: The node for which to find ancestors.
+        depth_limit: Optional maximum depth for traversal.
+
+    Returns:
+        Set of ancestor node IDs (excluding target_node itself).
+    """
+    if target_node not in graph:
+        return set()
+    if depth_limit is None:
+        return nx.ancestors(graph, target_node)
+    # Use reversed graph for upstream traversal
+    return set(nx.bfs_tree(graph.reverse(copy=False), target_node, depth_limit=depth_limit).nodes()) - {target_node}
+
 # --- Example Usage (Illustrative) ---
 if __name__ == '__main__':
     # Basic Logger Setup for Example
