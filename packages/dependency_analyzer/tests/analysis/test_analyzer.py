@@ -663,20 +663,7 @@ def test_classify_nodes_basic(complex_graph, da_test_logger: lg.Logger):
     found_any = any('hub' in r or 'utility' in r or 'orphan_component_member' in r for r in roles.values())
     assert found_any
 
-def test_classify_nodes_basic(complex_graph, da_test_logger: lg.Logger):
-    from dependency_analyzer.analysis.analyzer import classify_nodes
-    classify_nodes(complex_graph, da_test_logger, complexity_metrics_available=False)
-    # Check that node_role is assigned and at least one hub, utility, orphan, entry, terminal exists
-    roles = {n: complex_graph.nodes[n].get('node_role', []) for n in complex_graph.nodes()}
-    # There should be entry points
-    entry_points = [n for n, r in roles.items() if 'entry_point' in r]
-    assert set(entry_points) == {'EntryA', 'EntryB', 'Iso'}
-    # There should be terminal nodes
-    terminal_nodes = [n for n, r in roles.items() if 'terminal_node' in r]
-    assert 'T1' in terminal_nodes and 'Iso' in terminal_nodes
-    # There should be at least one hub or utility or orphan
-    found_any = any('hub' in r or 'utility' in r or 'orphan_component_member' in r for r in roles.values())
-    assert found_any
+# Removed duplicate definition of test_classify_nodes_basic
 
 
 # 9. calculate_node_complexity_metrics
