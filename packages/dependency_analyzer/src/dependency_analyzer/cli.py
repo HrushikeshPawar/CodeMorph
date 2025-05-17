@@ -370,5 +370,6 @@ def analyze_reachability(
         print(result_message)
     if upstream:
         ancestors = analyzer.get_ancestors(graph, node_id, depth_limit=depth)
-        local_logger.info(f"Ancestors (upstream) of '{node_id}' (depth_limit={depth}): {sorted(ancestors) if ancestors else 'None'}")
-        print(f"Ancestors (upstream) of '{node_id}' (depth_limit={depth}): {sorted(ancestors) if ancestors else 'None'}")
+        result_message = f"Ancestors (upstream) of '{node_id}' (depth_limit={depth}): {sorted(ancestors) if ancestors else 'None'}"
+        local_logger.info(result_message)
+        print(result_message)
