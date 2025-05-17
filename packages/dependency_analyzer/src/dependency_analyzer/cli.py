@@ -300,17 +300,25 @@ def analyze_metrics(
         return
 
     graph_storage = GraphStorage(local_logger)
-    graph = graph_storage.load_graph(graph_path, format=graph_format)
+
+    # Determine actual format to use for loading
+    actual_load_format = graph_format
+    if graph_format == da_config.DEFAULT_GRAPH_FORMAT:
+        inferred_format_from_ext = graph_path.suffix.lstrip('.').lower()
+        if inferred_format_from_ext and inferred_format_from_ext in da_config.VALID_GRAPH_FORMATS:
+            actual_load_format = inferred_format_from_ext
+            local_logger.info(f"Using inferred format '{actual_load_format}' for loading '{graph_path}'.")
+        else:
+            local_logger.info(f"Using default/specified format '{actual_load_format}' for loading '{graph_path}'.")
+
+    graph = graph_storage.load_graph(graph_path, format=actual_load_format)
     if not graph:
-        local_logger.error(f"Failed to load graph from '{graph_path}'.")
+        local_logger.error(f"Failed to load graph from '{graph_path}' using format '{actual_load_format}'.")
         return
 
     analyzer.calculate_node_complexity_metrics(graph, local_logger)
-    # Save the updated graph (structure-only, as metrics are node attributes)
-    if graph_storage.save_structure_only(graph, graph_path, format=graph_format):
-        local_logger.info(f"Metrics calculated and graph updated at '{graph_path}'.")
+    # Save the updated graph using the same format it was loaded with
+    if graph_storage.save_structure_only(graph, graph_path, format=actual_load_format):
+        local_logger.info(f"Metrics calculated and graph updated at '{graph_path}' (format: '{actual_load_format}').")
     else:
-        local_logger.error(f"Failed to save updated graph with metrics to '{graph_path}'.")
-
-if __name__ == "__main__": # To make cli.py runnable directly for development
-    app()
+        local_logger.error(f"Failed to save updated graph with metrics to '{graph_path}' (format: '{actual_load_format}').")

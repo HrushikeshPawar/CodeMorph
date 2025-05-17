@@ -433,11 +433,18 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
         return
 
     # Decision-point keywords for ACC (case-insensitive, word boundaries)
-    keywords = [
-        r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b',
-        r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b'
-    ]
+    # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
+    # Python's regex lookbehind must be fixed-width, so we can't use (?<!end\s*)
+    # Instead, match all, then filter out those preceded by 'end' and whitespace in post-processing
+    keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
     acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
+
+    def is_false_positive(match):
+        # Get up to 10 chars before the match
+        start = match.start()
+        before = obj.clean_code[max(0, start-10):start].lower()
+        # Check for 'end' followed by whitespace right before the keyword
+        return bool(re.search(r'end\s*$', before))
 
     for node_id, node_data in graph.nodes(data=True):
         obj = node_data.get('object')
@@ -456,7 +463,8 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
             num_calls_made = 0
         # Approximate Cyclomatic Complexity (ACC)
         if obj.clean_code:
-            acc_count = len(acc_pattern.findall(obj.clean_code))
+            matches = list(acc_pattern.finditer(obj.clean_code))
+            acc_count = sum(1 for m in matches if not is_false_positive(m))
             acc = acc_count + 1
         else:
             acc = 1
