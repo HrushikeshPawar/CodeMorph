@@ -147,7 +147,7 @@ The main workflow will:
 *   **`src/plsql_analyzer/utils/logging_setup.py`**:
     The `configure_logger` function sets up `loguru` for console and file-based logging, with configurable verbosity levels.
 
-*   **file_helpers.py**:
+*   **`src/plsql_analyzer/utils/file_helpers.py`**:
     The `FileHelpers` class provides utility functions for file operations, such as computing file hashes and deriving package names from file paths.
 
 ## Profiling
