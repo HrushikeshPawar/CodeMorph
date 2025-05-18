@@ -46,6 +46,16 @@ class AppConfig(BaseModel):
         default=False,
         description="Enable or disable profiling during analysis."
     )
+    
+    force_reprocess: set[str] = Field(
+        default_factory=set,
+        description="List of file paths to force reprocess, bypassing hash checks."
+    )
+    
+    clear_history_for_file: set[str] = Field(
+        default_factory=set,
+        description="List of processed file paths to clear history for from the database."
+    )
 
     call_extractor_keywords_to_drop: List[str] = Field(
         default_factory=lambda: CALL_EXTRACTOR_KEYWORDS_TO_DROP,

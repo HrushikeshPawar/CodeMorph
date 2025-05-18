@@ -185,6 +185,7 @@ class ExtractionWorkflow:
         self.total_objects_failed_signature = 0
         self.total_objects_failed_calls = 0
         self.total_objects_failed_db_add = 0
+        self.total_files_force_reprocessed = 0
 
     def _escape_angle_brackets(self, text: str|list|dict) -> str:
 
@@ -221,13 +222,19 @@ class ExtractionWorkflow:
             return
 
         stored_hash = self.db_manager.get_file_hash(str(processed_fpath))
-
-        if stored_hash == current_file_hash:
+        
+        # Check if this file should be force reprocessed
+        force_reprocess = str(fpath) in self.config.force_reprocess or str(processed_fpath) in self.config.force_reprocess
+        if force_reprocess:
+            self.logger.info(f"Force reprocessing: {processed_fpath} (ignoring hash check)")
+            self.total_files_force_reprocessed += 1
+        elif stored_hash == current_file_hash:
             self.logger.info(f"Skipping (unchanged): {processed_fpath} (Hash: {current_file_hash[:10]}...)")
             self.total_files_skipped_unchanged +=1
             return
         
-        self.logger.info(f"Change detected (or new file): {processed_fpath} "
+        # If we're here, file is either changed, new, or forced to reprocess
+        self.logger.info(f"{'Force reprocessing' if force_reprocess else 'Change detected (or new file)'}: {processed_fpath} "
                          f"(Stored: {stored_hash[:10] if stored_hash else 'None'}, Current: {current_file_hash[:10]}...)")
 
         try:
@@ -430,6 +437,7 @@ class ExtractionWorkflow:
         self.logger.info("--- Extraction Summary ---")
         self.logger.info(f"Total files processed: {self.total_files_processed}")
         self.logger.info(f"Files skipped (unchanged): {self.total_files_skipped_unchanged}")
+        self.logger.info(f"Files force reprocessed: {self.total_files_force_reprocessed}")
         self.logger.info(f"Files failed hashing: {self.total_files_failed_hash}")
         self.logger.info(f"Files failed structural parsing: {self.total_files_failed_structure_parse}")
         self.logger.info(f"Total code objects extracted and stored: {self.total_objects_extracted}")

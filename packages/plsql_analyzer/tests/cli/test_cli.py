@@ -18,6 +18,8 @@ def default_app_config_values():
         "exclude_names_from_processed_path": [],
         "exclude_names_for_package_derivation": ["PROCEDURES", "PACKAGE_BODIES", "FUNCTIONS"],
         "enable_profiler": False,
+        "force_reprocess": [],
+        "clear_history_for_file": [],
         "call_extractor_keywords_to_drop": CALL_EXTRACTOR_KEYWORDS_TO_DROP,
     }
 
@@ -32,6 +34,8 @@ def temp_config_file_all_fields(tmp_path: Path) -> Path:
         "exclude_names_from_processed_path": ["temp", "archive"],
         "exclude_names_for_package_derivation": ["DEV_PACKAGES"],
         "enable_profiler": True,
+        "force_reprocess": ["/path/to/force1.sql", "/path/to/force2.sql"],
+        "clear_history_for_file": ["processed/path/clear1.sql"],
         "call_extractor_keywords_to_drop": CALL_EXTRACTOR_KEYWORDS_TO_DROP,
     }
     config_file = tmp_path / "detailed_config.toml"
@@ -278,4 +282,37 @@ def test_cli_paths_absolute_relative(capsys, dummy_source_dir, tmp_path, mocker)
     
     finally:
         os.chdir(old_cwd)
+
+def test_force_reprocess_option(mocker, dummy_source_dir):
+    """Test that the --force-reprocess option is properly parsed and passed to the app config."""
+
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    cli_app([
+        "parse",
+        "--source-dir", str(dummy_source_dir),
+        "--force-reprocess", "/path/to/file1.sql",
+        "--force-reprocess", "/path/to/file2.sql"
+    ])
+    config = mock_run.call_args[0][0]  # First argument to run_plsql_analyzer
+    # The AppConfig should have the force_reprocess list with both files
+    assert len(config.force_reprocess) == 2
+    assert "/path/to/file1.sql" in config.force_reprocess
+    assert "/path/to/file2.sql" in config.force_reprocess
+
+def test_clear_history_for_file_option(mocker, dummy_source_dir):
+    """Test that the --clear-history-for-file option is properly parsed and passed to the app config."""
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    cli_app([
+        "parse",
+        "--source-dir", str(dummy_source_dir),
+        "--clear-history-for-file", "processed/path/file1.sql",
+        "--clear-history-for-file", "processed/path/file2.sql"])
+    
+    config = mock_run.call_args[0][0]
+
+    # The AppConfig should have the clear_history_for_file list with both files
+    assert len(config.clear_history_for_file) == 2
+    assert "processed/path/file1.sql" in config.clear_history_for_file
+    assert "processed/path/file2.sql" in config.clear_history_for_file
 
