@@ -13,6 +13,7 @@ from plsql_analyzer.parsing.call_extractor import CallDetailExtractor, Extracted
 from plsql_analyzer.core.code_object import PLSQL_CodeObject, CodeObjectType
 from plsql_analyzer.utils.file_helpers import FileHelpers
 from plsql_analyzer.utils.code_cleaner import clean_code_and_map_literals
+from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
 
 # Functions removed - now imported from utils.code_cleaner
@@ -44,26 +45,6 @@ class ExtractionWorkflow:
         self.total_objects_failed_calls = 0
         self.total_objects_failed_db_add = 0
         self.total_files_force_reprocessed = 0
-
-    def _escape_angle_brackets(self, text: str|list|dict) -> str:
-
-        # if isinstance(text, str):
-        #     return text.replace("<", "\\<")
-        
-        # if isinstance(text, list):
-        #     return [comp.replace("<", "\<") for comp in text if isinstance(comp, str)]
-        
-        # if isinstance(text, dict):
-        #     new_dict = {}
-        #     for key, value in text.items():
-        #         new_key = key.replace("<", "\<") if isinstance(key, str) else key
-        #         new_value = value.replace("<", "\<") if isinstance(value, str) else value
-
-        #         new_dict[new_key] = new_value
-            
-        #     return new_dict
-
-        return str(text).replace("<", "\\<")
 
     def _process_single_file(self, fpath: Path):
         self.logger.info(f"Processing File: {self.file_helpers.escape_angle_brackets(str(fpath))}")
@@ -102,7 +83,7 @@ class ExtractionWorkflow:
             clean_code, literal_map = clean_code_and_map_literals(code_content, self.logger)
             code_lines = clean_code.splitlines() # Keep for extracting source snippets
         except Exception as e:
-            self.logger.error(f"Failed to read file {fpath}: {self._escape_angle_brackets(e)}")
+            self.logger.error(f"Failed to read file {fpath}: {escape_angle_brackets(e)}")
             return
 
         try:
@@ -110,7 +91,7 @@ class ExtractionWorkflow:
             package_name_from_structural_parser, structurally_parsed_objects = self.structural_parser.parse(clean_code)
             structurally_parsed_objects: Dict
         except Exception as e:
-            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {self._escape_angle_brackets(e)}")
+            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {escape_angle_brackets(e)}")
             self.total_files_failed_structure_parse +=1
             return
             
@@ -163,7 +144,7 @@ class ExtractionWorkflow:
                     # Signature parser is designed to find signature within this.
                     parsed_signature_data = self.signature_parser.parse(object_source_snippet)
                 except Exception as e:
-                    obj_log_ctx.exception(f"Error during signature parsing for {obj_key_name}: {self._escape_angle_brackets(e)}")
+                    obj_log_ctx.exception(f"Error during signature parsing for {obj_key_name}: {escape_angle_brackets(e)}")
                     self.total_objects_failed_signature += 1
                     file_level_processing_error_occurred = True
                     # Continue, object might be stored with minimal info
@@ -190,7 +171,7 @@ class ExtractionWorkflow:
                     extracted_calls = self.call_extractor.extract_calls_with_details(object_source_snippet, literal_map)
                     obj_log_ctx.info(f"Extracted {len(extracted_calls)} calls for {actual_object_name}.")
                 except Exception as e:
-                    obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {self._escape_angle_brackets(e)}")
+                    obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {escape_angle_brackets(e)}")
                     self.total_objects_failed_calls += 1
                     file_level_processing_error_occurred = True
 

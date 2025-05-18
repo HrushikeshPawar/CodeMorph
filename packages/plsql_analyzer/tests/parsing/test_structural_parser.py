@@ -152,15 +152,6 @@ def test_reset_state(basic_parser: PlSqlStructuralParser):
     assert basic_parser.collected_code_objects == {}
     assert basic_parser.logger is not None # Logger should persist
 
-@pytest.mark.parametrize("text, expected", [
-    ("text with < brackets >", "text with \\< brackets \\>"),
-    ("no brackets", "no brackets"),
-    ("<>", "\\<\\>"),
-    ("", ""),
-])
-def test_escape_angle_brackets(basic_parser: PlSqlStructuralParser, text, expected):
-    assert basic_parser._escape_angle_brackets(text) == expected
-
 @pytest.mark.parametrize("line, initial_quote_state, expected_processed_line, expected_final_quote_state", [
     ("simple line", False, "simple line", False),
     ("line with -- comment", False, "line with ", False),

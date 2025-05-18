@@ -5,6 +5,7 @@ import loguru as lg
 import pyparsing as pp # Ensure pyparsing is installed: pip install pyparsing
 
 from typing import Dict, Optional
+from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
 # Pyparsing setup for better performance (call once if parser is instantiated once)
 pp.ParserElement.enablePackrat()
@@ -18,30 +19,13 @@ class PLSQLSignatureParser:
         # Enable packrat for the instance of the parser
         self.proc_or_func_signature.enable_packrat(cache_size_limit=1024, force=True)
 
-    def _escape_angle_brackets(self, text: str|list|dict) -> str:
-
-        # if isinstance(text, str):
-        #     return text.replace("<", "\\<")
-        
-        # if isinstance(text, list):
-        #     return [comp.replace("<", "\<") for comp in text if isinstance(comp, str)]
-        
-        # if isinstance(text, dict):
-        #     new_dict = {}
-        #     for key, value in text.items():
-        #         new_key = key.replace("<", "\<") if isinstance(key, str) else key
-        #         new_value = value.replace("<", "\<") if isinstance(value, str) else value
-
-        #         new_dict[new_key] = new_value
-            
-        #     return new_dict
-
-        return str(text).replace("<", "\\<")
+    # _escape_angle_brackets method has been removed and replaced with
+    # the centralized version from utils.text_utils
 
     def _process_parameter(self, s: str, loc: int, toks: pp.ParseResults) -> Dict[str, str|bool]:
         # toks[0] is the Group containing parameter details
         p_dict = toks[0].as_dict()
-        self.logger.trace(f"Raw param toks: {self._escape_angle_brackets(p_dict)}")
+        self.logger.trace(f"Raw param toks: {escape_angle_brackets(p_dict)}")
 
         raw_mode = p_dict.get("param_mode_raw")
         mode = "IN" # Default
@@ -59,7 +43,7 @@ class PLSQLSignatureParser:
             "default_value": p_dict.get("default_value", "").strip() or None, # Ensure empty string becomes None
             # "has_nocopy": "has_nocopy" in p_dict # True if NOCOPY was present
         }
-        self.logger.trace(f"Processed param: {self._escape_angle_brackets(param_info)}")
+        self.logger.trace(f"Processed param: {escape_angle_brackets(param_info)}")
         return param_info
 
     def _setup_pyparsing_parser(self):
@@ -268,7 +252,7 @@ class PLSQLSignatureParser:
         # includes the body, `SkipTo(IS|AS)` might be needed before this parser.
         # However, the grammar is defined up to IS/AS.
 
-        self.logger.debug(f"Attempting to parse signature: {self._escape_angle_brackets(clean_signature_text[:200])}...") # Log snippet
+        self.logger.debug(f"Attempting to parse signature: {escape_angle_brackets(clean_signature_text[:200])}...") # Log snippet
         
         try:
             # The parser needs to handle the entire object definition line typically
@@ -294,7 +278,7 @@ class PLSQLSignatureParser:
                 
                 if new_len >= best_match_len:
                     best_match = toks # Take the first (and likely only, for a single object's source)
-                    self.logger.trace(f"Found Signature match from {start} to {end}: {self._escape_angle_brackets(toks.as_dict())}")
+                    self.logger.trace(f"Found Signature match from {start} to {end}: {escape_angle_brackets(toks.as_dict())}")
 
             # parsed_dict = self.proc_or_func_signature.parse_string(clean_signature_text).as_dict()
             # # Ensure 'params' is always a list, even if empty
@@ -314,19 +298,19 @@ class PLSQLSignatureParser:
                     # Note: 'params' is handled separately as it's a list of dicts
                     # The stripping for param details happens in _process_parameter
 
-                self.logger.debug(f"Successfully parsed signature. Name: {self._escape_angle_brackets(parsed_dict.get('proc_name') or parsed_dict.get('func_name'))}, Param: {self._escape_angle_brackets(json.dumps(parsed_dict.get("params", {}), indent=0))}")
+                self.logger.debug(f"Successfully parsed signature. Name: {escape_angle_brackets(parsed_dict.get('proc_name') or parsed_dict.get('func_name'))}, Param: {escape_angle_brackets(json.dumps(parsed_dict.get('params', {}), indent=0))}")
                 # Ensure 'params' is always a list, even if empty
                 if "params" not in parsed_dict:
                     parsed_dict["params"] = []
                 return parsed_dict
             else:
-                self.logger.warning(f"No PL/SQL signature found or matched in the provided text: {self._escape_angle_brackets(signature_text[:200])}...")
+                self.logger.warning(f"No PL/SQL signature found or matched in the provided text: {escape_angle_brackets(signature_text[:200])}...")
                 return None
 
         except pp.ParseException as pe:
             self.logger.error(f"Failed to parse PL/SQL signature. Error: {pe}")
             self.logger.debug(f"ParseException at L{pe.lineno} C{pe.col}: {pe.line}")
-            self.logger.debug(f"Problematic text (context): '{self._escape_angle_brackets(signature_text[max(0,pe.loc-30):pe.loc+30])}'")
+            self.logger.debug(f"Problematic text (context): '{escape_angle_brackets(signature_text[max(0,pe.loc-30):pe.loc+30])}'")
             return None
         except Exception as e:
             self.logger.error(f"An unexpected error occurred during signature parsing: {e}")
