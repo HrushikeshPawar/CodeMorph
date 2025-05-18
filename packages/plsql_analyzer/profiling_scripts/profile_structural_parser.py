@@ -1,13 +1,12 @@
-# packages/plsql_analyzer/profiling_scripts/profile_structural_parser.py
 import cProfile
 import pstats
 import io
-from tqdm.auto  import tqdm
-# from pathlib import Path
+from tqdm.auto import tqdm
+from pathlib import Path
 
-# Adjust the import path according to your project structure
 from plsql_analyzer.orchestration.extraction_workflow import clean_code_and_map_literals
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
+from plsql_analyzer.settings import AppConfig
 
 # --- Mock Logger (to minimize logging overhead during profiling) ---
 class MockLogger:
@@ -26,7 +25,7 @@ mock_logger = MockLogger()
 NUM_ITERATIONS = 500
 
 # --- Profiler Runner ---
-def run_profiler(func_to_profile, *args, **kwargs):
+def run_profiler(func_to_profile, output_dir, *args, **kwargs):
     profiler = cProfile.Profile()
     profiler.enable()
     for _ in tqdm(range(NUM_ITERATIONS), "Run Iterations"):
@@ -38,12 +37,13 @@ def run_profiler(func_to_profile, *args, **kwargs):
     print(s.getvalue())
 
     # For more detailed analysis, you can dump stats to a file:
-    profiler.dump_stats(r"packages\plsql_analyzer\profiling_scripts\structural_parser.prof")
+    profile_output = output_dir / "structural_parser.prof"
+    profiler.dump_stats(profile_output)
+    print(f"Profile data saved to: {profile_output}")
     return result
 
 # --- SQL File Path (User needs to set this) ---
-# Replace with the actual path to your AUTOFAX_PKG.sql file
-USER_SQL_FILE_PATH = r"c:\Users\C9B6J9\Projects\CodeMorph\data\Bulk Download\fop_owner\PACKAGE_BODIES\AUTOFAX_PKG.sql"
+USER_SQL_FILE_PATH = "/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data/large_example.sql"
 
 def read_sql_file(file_path_str: str) -> str | None:
     try:
@@ -56,6 +56,17 @@ def read_sql_file(file_path_str: str) -> str | None:
         return None
 
 def profile_structural_parser_main():
+    # Create AppConfig instance
+    app_config = AppConfig(
+        source_code_root_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data"),
+        output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
+        log_verbose_level=0,  # Minimal logging for profiling
+        enable_profiler=True
+    )
+    
+    # Make sure artifact directories exist
+    app_config.ensure_artifact_dirs()
+    
     sql_content = read_sql_file(USER_SQL_FILE_PATH)
     if not sql_content:
         return
@@ -63,7 +74,7 @@ def profile_structural_parser_main():
     parser = PlSqlStructuralParser(logger=mock_logger, verbose_lvl=0)
 
     print(f"\n--- Profiling PlSqlStructuralParser.parse() with {USER_SQL_FILE_PATH} ---")
-    run_profiler(parser.parse, sql_content)
+    run_profiler(parser.parse, app_config.output_base_dir, sql_content)
 
 if __name__ == "__main__":
     profile_structural_parser_main()

@@ -1,4 +1,3 @@
-# filepath: profile_extraction_workflow.py
 import cProfile
 import pstats
 import io
@@ -6,19 +5,17 @@ import tempfile
 import shutil
 from pathlib import Path
 
-# Adjust import paths according to your project structure
-from plsql_analyzer import config
+# Import components using the new configuration system
+from plsql_analyzer.settings import AppConfig
 from plsql_analyzer.orchestration.extraction_workflow import ExtractionWorkflow
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
 from plsql_analyzer.parsing.call_extractor import CallDetailExtractor
-from plsql_analyzer.utils.file_helpers import FileHelpers # Assuming this class exists
-# from plsql_analyzer.persistence.database_manager import DatabaseManager # For type hint if needed
-# from plsql_analyzer.core.code_object import PLSQL_CodeObject, CodeObjectType # For type hint if needed
-# from plsql_analyzer import config # For type hint if needed
+from plsql_analyzer.utils.file_helpers import FileHelpers
+from plsql_analyzer.persistence.database_manager import DatabaseManager
 
 
-# --- Mock Components ---
+# --- Mock Logger ---
 class MockLogger:
     def bind(self, **kwargs): return self
     def trace(self, msg): pass
@@ -33,22 +30,8 @@ class MockLogger:
 
 mock_logger_instance = MockLogger()
 
-class MockConfig:
-    SOURCE_CODE_ROOT_DIR = "" # Will be set to temp dir
-    FILE_EXTENSION = "sql"    # Or "SQL", ensure case matches rglob pattern
-    EXCLUDE_FROM_PROCESSED_PATH = ["exclude_this_part_of_path"] # Example
-    EXCLUDE_FROM_PATH_FOR_PACKAGE_DERIVATION = ["another_exclude"] # Example
-    # Add any other config attributes used by ExtractionWorkflow or its dependencies
-
-class MockDatabaseManager:
-    def get_file_hash(self, fpath_str: str) -> str | None: return None
-    def update_file_hash(self, fpath_str: str, file_hash: str) -> bool: return True
-    def add_codeobject(self, code_obj: any, fpath_str: str) -> bool: return True
-    def remove_file_record(self, fpath_str: str) -> bool: return True
-    # Add other methods if called by the workflow
-
 # --- Profiler Runner ---
-def run_profiler(func_to_profile, *args, **kwargs):
+def run_profiler(func_to_profile, output_dir, *args, **kwargs):
     profiler = cProfile.Profile()
     profiler.enable()
     result = func_to_profile(*args, **kwargs)
@@ -58,12 +41,15 @@ def run_profiler(func_to_profile, *args, **kwargs):
     ps.print_stats()
     print(s.getvalue())
 
-    profiler.dump_stats(r"packages\plsql_analyzer\profiling_scripts\profile_extraction_workflow.prof")
+    # Use output directory from AppConfig
+    profile_output = output_dir / "profile_extraction_workflow.prof"
+    profiler.dump_stats(profile_output)
+    print(f"Profile data saved to: {profile_output}")
 
     return result
 
 # --- SQL File Path (User needs to set this) ---
-USER_SQL_FILE_PATH = r"c:\Users\C9B6J9\Projects\CodeMorph\data\Bulk Download\fop_owner\PACKAGE_BODIES\AUTOFAX_PKG.sql"
+USER_SQL_FILE_PATH = "/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data/large_example.sql"
 
 def read_sql_file(file_path_str: str) -> str | None:
     try:
@@ -82,32 +68,33 @@ def profile_extraction_workflow_main():
     # Ensure the filename matches the configured FILE_EXTENSION for rglob
     temp_sql_file_path = Path(temp_source_dir) / (Path(USER_SQL_FILE_PATH).stem + ".sql")
 
-
     try:
         with open(temp_sql_file_path, 'w', encoding='utf-8') as f:
             f.write(sql_content_to_write)
         mock_logger_instance.info(f"Created temp file: {temp_sql_file_path}")
 
+        # Create AppConfig instance
+        app_config = AppConfig(
+            source_code_root_dir=temp_source_dir,
+            output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
+            log_verbose_level=0,  # Minimal logging for profiling
+            enable_profiler=True
+        )
+        
+        # Make sure artifact directories exist
+        app_config.ensure_artifact_dirs()
 
-        mock_config_instance = MockConfig()
-        mock_config_instance.SOURCE_CODE_ROOT_DIR = str(temp_source_dir)
-
-        # keywords_for_call_extractor = [
-        #     "IF", "THEN", "ELSE", "ELSIF", "END", "LOOP", "WHILE", "FOR", "BEGIN", "EXCEPTION",
-        #     "DECLARE", "SELECT", "INSERT", "UPDATE", "DELETE", "FROM", "WHERE", "GROUP", "ORDER",
-        #     "BY", "HAVING", "CREATE", "ALTER", "DROP", "TABLE", "VIEW", "INDEX", "PROCEDURE",
-        #     "FUNCTION", "PACKAGE", "BODY", "TYPE", "CURSOR", "RETURN", "IS", "AS", "CONSTANT",
-        #     "NULL", "OTHERS", "RAISE", "OPEN", "FETCH", "CLOSE", "COMMIT", "ROLLBACK", "SAVEPOINT",
-        #     "EXECUTE", "IMMEDIATE", "GRANT", "REVOKE", "LOCK", "MERGE", "CASE", "WHEN", "EXIT"
-        # ]
-
-        db_manager = MockDatabaseManager()
+        db_manager = DatabaseManager(app_config.database_path, mock_logger_instance)
+        try:
+            db_manager.setup_database()  # Create tables if they don't exist
+        except Exception as e:
+            mock_logger_instance.error(f"Database setup failed: {e}.")
+            return
+            
         structural_parser = PlSqlStructuralParser(logger=mock_logger_instance, verbose_lvl=0)
         signature_parser = PLSQLSignatureParser(logger=mock_logger_instance)
-        call_extractor = CallDetailExtractor(logger=mock_logger_instance, keywords_to_drop=config.CALL_EXTRACTOR_KEYWORDS_TO_DROP)
+        call_extractor = CallDetailExtractor(logger=mock_logger_instance, keywords_to_drop=app_config.call_extractor_keywords_to_drop)
         
-        # Assuming FileHelpers takes a logger and its methods are compatible
-        # If FileHelpers has other dependencies or complex setup, adjust instantiation.
         try:
             file_helpers = FileHelpers(logger=mock_logger_instance)
         except TypeError as e:
@@ -115,9 +102,8 @@ def profile_extraction_workflow_main():
             mock_logger_instance.error("Please ensure FileHelpers is correctly mocked or instantiated for profiling.")
             return
 
-
         workflow = ExtractionWorkflow(
-            config=mock_config_instance,
+            config=app_config,
             logger=mock_logger_instance,
             db_manager=db_manager,
             structural_parser=structural_parser,
@@ -127,7 +113,7 @@ def profile_extraction_workflow_main():
         )
 
         print(f"\n--- Profiling ExtractionWorkflow.run() with {temp_sql_file_path} ---")
-        run_profiler(workflow.run)
+        run_profiler(workflow.run, app_config.output_base_dir)
 
     finally:
         shutil.rmtree(temp_source_dir)
