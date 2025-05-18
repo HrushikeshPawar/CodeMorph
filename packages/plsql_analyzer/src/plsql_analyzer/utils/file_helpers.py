@@ -81,7 +81,7 @@ class FileHelpers:
     def derive_package_name_from_path(self,
                                    package_name_from_code: Optional[str],
                                    fpath: Path,
-                                   file_extension: str,
+                                   file_extensions: List[str],
                                    exclude_parts_for_pkg_derivation: List[str]) -> str:
         """
         Derives a package name from the file path, prepending parts of the
@@ -91,7 +91,7 @@ class FileHelpers:
         The final package name string is casefolded.
         """
 
-        self.logger.trace(f"Deriving package name for file '{fpath}'. Initial package from code: '{package_name_from_code}'. Excluding path parts: {exclude_parts_for_pkg_derivation}")
+        self.logger.trace(f"Deriving package name for file '{fpath}'. Initial package from code: '{package_name_from_code}'. Excluding path parts: {exclude_parts_for_pkg_derivation}. File extensions: {file_extensions}")
 
         # Normalize exclusion parts to lowercase for case-insensitive comparison
         exclude_parts_lower = [part.casefold() for part in exclude_parts_for_pkg_derivation]
@@ -105,7 +105,18 @@ class FileHelpers:
 
             # Remove file extension (if present) from the current path segment
             # NOTE: This logic might incorrectly remove parts of directory names if they match '.{file_extension}'
-            name_part = path_segment.split(f'.{file_extension}')[0]
+            file_extension = None
+            for ext in file_extensions:
+                if path_segment.endswith(f'.{ext}'):
+                    file_extension = ext
+                    self.logger.trace(f"File extension found: '{file_extension}' for segment '{path_segment}'")
+                    break
+
+            if file_extension:
+                name_part = path_segment.replace(f'.{file_extension}', '')
+            else:
+                name_part = path_segment
+
             if name_part != path_segment:
                 self.logger.trace(f"Segment '{path_segment}' potentially stripped extension to '{name_part}'")
 

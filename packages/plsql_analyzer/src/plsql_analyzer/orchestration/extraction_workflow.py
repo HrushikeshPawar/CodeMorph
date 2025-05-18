@@ -5,7 +5,7 @@ from tqdm.auto import tqdm
 import loguru as lg # Expect logger
 from typing import List, Dict, Any, Optional, Tuple
 
-from plsql_analyzer import config # Assuming config is passed as an object or dict
+from plsql_analyzer.settings import AppConfig
 from plsql_analyzer.persistence.database_manager import DatabaseManager
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
@@ -161,7 +161,7 @@ def clean_code_and_map_literals(code: str, logger:lg.Logger) -> Tuple[str, Dict[
 
 class ExtractionWorkflow:
     def __init__(self,
-                    config: 'config', # Pass the loaded config module or a config object/dict
+                    config: 'AppConfig', # Pass the loaded config module or a config object/dict
                     logger: lg.Logger,
                     db_manager: 'DatabaseManager',
                     structural_parser: 'PlSqlStructuralParser',
@@ -211,7 +211,7 @@ class ExtractionWorkflow:
         self.logger.info(f"Processing File: {self.file_helpers.escape_angle_brackets(str(fpath))}")
         
         processed_fpath = self.file_helpers.get_processed_fpath(
-            fpath, self.config.EXCLUDE_FROM_PROCESSED_PATH
+            fpath, self.config.exclude_names_from_processed_path
         )
         current_file_hash = self.file_helpers.compute_file_hash(fpath)
 
@@ -255,8 +255,8 @@ class ExtractionWorkflow:
         final_package_name_for_file_objects = self.file_helpers.derive_package_name_from_path(
             package_name_from_structural_parser,
             fpath,
-            self.config.FILE_EXTENSION,
-            self.config.EXCLUDE_FROM_PATH_FOR_PACKAGE_DERIVATION
+            self.config.file_extensions_to_include,
+            self.config.exclude_names_for_package_derivation
         )
         self.logger.info(f"Derived package context for objects in {fpath.name} as: '{final_package_name_for_file_objects}'")
 
@@ -395,15 +395,17 @@ class ExtractionWorkflow:
     def run(self):
         self.logger.info("Starting PL/SQL Extraction Workflow...")
         
-        source_folder = Path(self.config.SOURCE_CODE_ROOT_DIR)
+        source_folder = Path(self.config.source_code_root_dir)
         if not source_folder.is_dir():
             self.logger.critical(f"Source code directory does not exist or is not a directory: {source_folder}")
             return
 
         # Using rglob to find all files matching the extension recursively
-        files_to_process = list(source_folder.rglob(f'*.{self.config.FILE_EXTENSION.lstrip(".")}'))
-        
-        self.logger.info(f"Found {len(files_to_process)} files with extension ' .{self.config.FILE_EXTENSION} ' in {source_folder}")
+        files_to_process = []
+        for extension in self.config.file_extensions_to_include:
+            self.logger.info(f"Searching for files with extension: {extension}")
+            # Using rglob to find all files matching the extension recursively
+            files_to_process.extend(list(source_folder.rglob(f"*.{extension}")))
 
         if not files_to_process:
             self.logger.warning("No files found to process. Exiting workflow.")
