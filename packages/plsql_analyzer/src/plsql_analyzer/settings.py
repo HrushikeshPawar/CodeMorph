@@ -63,9 +63,16 @@ class AppConfig(BaseModel):
 
     @field_validator('source_code_root_dir', 'output_base_dir', mode='before')
     @classmethod
-    def expand_and_resolve_path(cls, v):
-        if isinstance(v, Path):
-            v = str(v)
-        v = os.path.expanduser(v)
-        v = os.path.expandvars(v)
-        return Path(v).resolve()
+    @classmethod
+    def expand_and_resolve_path(cls, v: 'Any') -> Path:
+        if not isinstance(v, (str, Path)):
+            # Return 'v' to let Pydantic attempt its standard parsing and validation for non-str/Path types.
+            # This will likely lead to a more informative ValidationError if 'v' is unsuitable for a Path field.
+            return v
+
+        path_str = str(v)  # Ensure 'v' is a string for os.path functions
+        
+        expanded_path_str = os.path.expanduser(path_str)
+        expanded_path_str = os.path.expandvars(expanded_path_str)
+        
+        return Path(expanded_path_str).resolve()
