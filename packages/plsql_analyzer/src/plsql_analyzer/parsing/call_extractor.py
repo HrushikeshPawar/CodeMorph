@@ -63,82 +63,6 @@ class CallDetailExtractor:
 
         return str(text).replace("<", "\\<")
 
-    def _preprocess_code(self, code: str):
-        """
-        Removes comments and replaces string literals with placeholders.
-        Based on the user-provided `remove_string_literals_and_comments` function.
-        """
-        self.logger.debug("Preprocessing code: removing comments and string literals.")
-        self.literal_mapping = {}
-        inside_quote = False
-        inside_inline_comment = False
-        inside_multiline_comment = False
-
-        idx = 0
-        clean_code_chars = [] # Use a list for efficiency, then join
-        current_literal_chars = []
-
-        while idx < len(code):
-            current_char = code[idx]
-            next_char = code[idx + 1] if (idx + 1) < len(code) else None
-
-            if inside_inline_comment:
-                if current_char == "\n":
-                    inside_inline_comment = False
-                    clean_code_chars.append('\n')
-                idx += 1
-                continue
-
-            if inside_multiline_comment:
-                if f"{current_char}{next_char}" == "*/":
-                    inside_multiline_comment = False
-                    idx += 2
-                else:
-                    idx += 1
-                continue
-            
-            if f"{current_char}{next_char}" == "/*" and not inside_quote:
-                inside_multiline_comment = True
-                idx += 2
-                continue
-
-            if f"{current_char}{next_char}" == "--" and not inside_quote:
-                inside_inline_comment = True
-                idx += 1 # Consume only the first '-' of '--'
-                continue
-            
-            # Handle escaped single quotes within literals
-            if inside_quote and current_char == "'" and next_char == "'":
-                current_literal_chars.append("''") # Keep escaped quote
-                idx += 2
-                continue
-
-            if current_char == "'":
-                inside_quote = not inside_quote
-
-                if not inside_quote: # End of literal
-                    literal_name = f"<LITERAL_{len(self.literal_mapping)}>"
-                    self.literal_mapping[literal_name] = "".join(current_literal_chars)
-                    current_literal_chars = []
-                    clean_code_chars.append(literal_name) # Placeholder only
-                    clean_code_chars.append("'")
-                
-                else:
-                    clean_code_chars.append("'")
-
-                idx += 1
-                continue
-            
-            if inside_quote:
-                current_literal_chars.append(current_char)
-            else:
-                clean_code_chars.append(current_char)
-            
-            idx += 1
-        
-        self.cleaned_code  = "".join(clean_code_chars)
-        self.logger.debug(f"Preprocessing complete. Original Code Length: {len(code)}, Cleaned code length: {len(self.cleaned_code)}, Literals found: {len(self.literal_mapping)}")
-
     def _record_call(self, s:str, loc:int, toks:pp.ParseResults) -> pp.ParseResults:
        # This method uses self.code_string_for_parsing for line number calculation
         if isinstance(toks[0], pp.ParseResults):
@@ -403,17 +327,23 @@ class CallDetailExtractor:
 
         return CallParameterTuple(restored_positional_params, restored_named_params)
 
-    def extract_calls_with_details(self, original_plsql_code: str, literal_mapping:Dict[str, str]) -> List[CallDetailsTuple]:
+    def extract_calls_with_details(self, cleaned_plsql_code: str, literal_mapping: Dict[str, str]) -> List[CallDetailsTuple]:
         """
         Main public method to extract all procedure/function calls with their parameters.
+        
+        Args:
+            cleaned_plsql_code: Pre-cleaned code with literals replaced with placeholders
+            literal_mapping: Mapping of literal placeholders to their original values
+            
+        Returns:
+            List of CallDetailsTuple objects representing all extracted calls
         """
         self.logger.info("Starting extraction of calls with parameters from PL/SQL code.")
         
         # Reset Parser
         self._reset_internal_state()
         
-        # self._preprocess_code(original_plsql_code)
-        self.cleaned_code = original_plsql_code
+        self.cleaned_code = cleaned_plsql_code
         self.literal_mapping = literal_mapping
         if not self.cleaned_code.strip():
             self.logger.info("No content in code after preprocessing. No calls to extract.")
