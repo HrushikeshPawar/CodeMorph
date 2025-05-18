@@ -129,8 +129,6 @@ class PLSQL_CodeObject:
 
         Args:
             data: The dictionary containing the code object's data.
-            call_details_tuple_class: The class constructor for CallDetailsTuple.
-                                      This is needed to reconstruct the named tuples.
 
         Returns:
             A PLSQL_CodeObject instance.

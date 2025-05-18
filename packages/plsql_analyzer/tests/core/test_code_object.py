@@ -266,7 +266,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             base_id = name_cf
         dict_for_from_dict['id'] = base_id
 
-        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict)
 
         b_data = basic_code_object_data_for_serde
         assert obj.id == base_id
@@ -320,7 +320,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         
         assert isinstance(obj_dict['type'], str) # to_dict converts enum to string
 
-        deserialized_obj = PLSQL_CodeObject.from_dict(obj_dict, sample_call_details_tuple_class)
+        deserialized_obj = PLSQL_CodeObject.from_dict(obj_dict)
 
         # Compare all relevant attributes
         assert deserialized_obj.id == original_obj.id
@@ -342,7 +342,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         dict_for_from_dict = minimal_code_object_data_for_serde.copy()
         dict_for_from_dict['type'] = minimal_code_object_data_for_serde['type'].value.upper()
         
-        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict)
         m_data = minimal_code_object_data_for_serde
         name_cf = m_data['name'].strip().casefold()
         pkg_name_cf = m_data['package_name'].strip().casefold() if m_data['package_name'] else ""
@@ -380,7 +380,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         expected_id = f"{base_id}-{hashlib.sha256(param_hash_str.encode()).hexdigest()}"
         dict_for_from_dict['id'] = expected_id # Simulate stored ID
 
-        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(dict_for_from_dict)
 
         assert obj.id == expected_id
         assert obj.name == name_cf
@@ -400,7 +400,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'type': 'NON_EXISTENT_TYPE', 
             'id': expected_id 
         }
-        obj = PLSQL_CodeObject.from_dict(data, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(data)
         assert obj.type == CodeObjectType.UNKNOWN
 
     def test_type_deserialization_type_missing(self, sample_call_details_tuple_class):
@@ -414,7 +414,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             # 'type': key is missing
             'id': expected_id
         }
-        obj = PLSQL_CodeObject.from_dict(data, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(data)
         assert obj.type == CodeObjectType.UNKNOWN 
 
     def test_extracted_calls_reconstruction_detailed(self, sample_call_details_tuple_class):
@@ -433,7 +433,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'extracted_calls': call_data_list,
             'id': expected_id
         }
-        obj = PLSQL_CodeObject.from_dict(data_dict, sample_call_details_tuple_class)
+        obj = PLSQL_CodeObject.from_dict(data_dict)
         
         assert len(obj.extracted_calls) == 2
         assert isinstance(obj.extracted_calls[0], sample_call_details_tuple_class)
@@ -455,7 +455,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'name': name_cf1, 'package_name': pkg_name_cf1, 'type': 'PROCEDURE',
             'source_code_lines': {'start': 50, 'end': 100}, 'id': id1
         }
-        obj_full = PLSQL_CodeObject.from_dict(data_full, sample_call_details_tuple_class)
+        obj_full = PLSQL_CodeObject.from_dict(data_full)
         assert obj_full.start_line == 50
         assert obj_full.end_line == 100
 
@@ -466,7 +466,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         data_no_lines_key = {
             'name': name_cf2, 'package_name': pkg_name_cf2, 'type': 'PROCEDURE', 'id': id2
         }
-        obj_no_lines_key = PLSQL_CodeObject.from_dict(data_no_lines_key, sample_call_details_tuple_class)
+        obj_no_lines_key = PLSQL_CodeObject.from_dict(data_no_lines_key)
         assert obj_no_lines_key.start_line is None
         assert obj_no_lines_key.end_line is None
 
@@ -478,7 +478,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'name': name_cf3, 'package_name': pkg_name_cf3, 'type': 'PROCEDURE',
             'source_code_lines': {}, 'id': id3
         }
-        obj_empty_lines_dict = PLSQL_CodeObject.from_dict(data_empty_lines_dict, sample_call_details_tuple_class)
+        obj_empty_lines_dict = PLSQL_CodeObject.from_dict(data_empty_lines_dict)
         assert obj_empty_lines_dict.start_line is None
         assert obj_empty_lines_dict.end_line is None
 
@@ -490,7 +490,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'name': name_cf4a, 'package_name': pkg_name_cf4a, 'type': 'PROCEDURE',
             'source_code_lines': {'start': 10}, 'id': id4a
         }
-        obj_partial_lines = PLSQL_CodeObject.from_dict(data_partial_lines, sample_call_details_tuple_class)
+        obj_partial_lines = PLSQL_CodeObject.from_dict(data_partial_lines)
         assert obj_partial_lines.start_line == 10
         assert obj_partial_lines.end_line is None
 
@@ -501,6 +501,6 @@ class TestPLSQLCodeObjectSerializationDeserialization:
             'name': name_cf4b, 'package_name': pkg_name_cf4b, 'type': 'PROCEDURE',
             'source_code_lines': {'end': 200}, 'id': id4b
         }
-        obj_partial_lines_end_only = PLSQL_CodeObject.from_dict(data_partial_lines_end_only, sample_call_details_tuple_class)
+        obj_partial_lines_end_only = PLSQL_CodeObject.from_dict(data_partial_lines_end_only)
         assert obj_partial_lines_end_only.start_line is None
         assert obj_partial_lines_end_only.end_line == 200
