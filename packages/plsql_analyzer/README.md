@@ -154,8 +154,8 @@ The main workflow will:
 
 The package includes scripts in the `profiling_scripts/` directory to help analyze the performance of key components:
 *   profile_extraction_workflow.py: Profiles the entire extraction workflow.
-*   `profile_signature_parser.py`: Profiles the `PLSQLSignatureParser`.
-*   `profile_structural_parser.py`: Profiles the `PlSqlStructuralParser`.
+*   `profiling_scripts/profile_signature_parser.py`: Profiles the `PLSQLSignatureParser`.
+*   `profiling_scripts/profile_structural_parser.py`: Profiles the `PlSqlStructuralParser`.
 
 These scripts use `cProfile` and `pstats` and can generate `.prof` files that can be visualized with tools like `snakeviz`.
 
