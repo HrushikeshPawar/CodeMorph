@@ -129,7 +129,7 @@ The main workflow will:
 *   **`src/plsql_analyzer/core/code_object.py`**:
     Defines the `PLSQL_CodeObject` class, which is the central data structure for storing information about each parsed PL/SQL entity (procedure, function, package). It includes attributes for name, type, parameters, return type, extracted calls, source code location, etc. Also defines `CodeObjectType` enum.
 
-*   **structural_parser.py**:
+*   **`src/plsql_analyzer/parsing/structural_parser.py`**:
     The `PlSqlStructuralParser` class is responsible for analyzing the overall structure of PL/SQL code. It identifies packages, procedures, functions, and block structures (IF, LOOP, BEGIN/END) by processing the code line by line and maintaining a scope stack.
 
 *   **`src/plsql_analyzer/parsing/signature_parser.py`**:
