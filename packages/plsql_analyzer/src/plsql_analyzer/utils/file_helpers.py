@@ -113,7 +113,7 @@ class FileHelpers:
                     break
 
             if file_extension:
-                name_part = path_segment.replace(f'.{file_extension}', '')
+                name_part = Path(path_segment).stem
             else:
                 name_part = path_segment
 
