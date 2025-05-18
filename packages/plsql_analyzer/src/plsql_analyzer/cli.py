@@ -57,6 +57,8 @@ def parse(
     exclude_dirs: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from analysis.", name=["--exd"], consume_multiple=True)] = None,
     exclude_names: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from package naming process.", name=["--exn"], consume_multiple=True)] = None,
     database_filename: Annotated[Optional[str], Parameter(help="Name of the SQLite database file.", name=["--db-filename", "--dbf"])] = None,
+    force_reprocess: Annotated[Optional[List[str]], Parameter(help="Force reprocessing specific files, bypassing hash checks.", name=["--force-reprocess"], consume_multiple=True)] = None,
+    clear_history_for_file: Annotated[Optional[List[str]], Parameter(help="Clear history for specific files (using processed paths as stored in DB).", name=["--clear-history-for-file"], consume_multiple=True)] = None,
 ):
     """
     Parse PL/SQL source code to extract various code objects - Procedures and Function.
@@ -78,6 +80,8 @@ def parse(
         "exclude_names_from_processed_path": exclude_dirs,
         "exclude_names_for_package_derivation": exclude_names,
         "database_filename": database_filename,
+        "force_reprocess": force_reprocess,
+        "clear_history_for_file": clear_history_for_file,
     }
 
     # Filter out None values from CLI args to not override TOML/defaults unnecessarily
@@ -124,9 +128,14 @@ def run_plsql_analyzer(app_config: AppConfig, logger:'Logger'):
         logger.critical(f"Database setup failed: {e}. Halting application.")
         return # Stop if DB can't be set up
 
-    # TODO: Handle the removal of files from the database if needed
-    # for fpath in config.REMOVE_FPATH:
-    #     db_manager.remove_file_record(fpath)
+    # Handle clearing history for specified files
+    if hasattr(app_config, 'clear_history_for_file') and app_config.clear_history_for_file:
+        for fpath in app_config.clear_history_for_file:
+            logger.info(f"Clearing history for file: {fpath}")
+            if db_manager.remove_file_record(fpath):
+                logger.success(f"Successfully cleared history for {fpath}")
+            else:
+                logger.error(f"Failed to clear history for {fpath}")
         
 
     # 3. Initialize Parsers
