@@ -102,7 +102,8 @@ def parse(
         run_plsql_analyzer(app_config, logger)
 
     except Exception as e:
-        print(f"Error initializing AppConfig or running analysis: {e}")
+        logger.error("Error initializing AppConfig or running analysis")
+        logger.exception(e)
         return
 
 
@@ -160,7 +161,7 @@ def run_plsql_analyzer(app_config: AppConfig, logger:'Logger'):
         ps.print_stats()
         print(s.getvalue())
 
-        profiler.dump_stats(r"packages\plsql_analyzer\profiling_scripts\profile_plsql_analyzer_complete_run_v1-20250515.prof")
+        profiler.dump_stats(app_config.output_base_dir / f"profile_plsql_analyzer-{app_config.source_code_root_dir.name}-{app_config.database_filename}.prof")
 
 
 if __name__ == "__main__":
