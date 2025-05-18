@@ -1,4 +1,4 @@
-Collecting workspace information```markdown
+# PL/SQL Analyzer (`plsql-analyzer`)
 # PL/SQL Analyzer (`plsql-analyzer`)
 
 ## Overview
