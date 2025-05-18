@@ -87,6 +87,7 @@ def test_extraction_workflow_process_single_file_uses_config(mock_app_config, mo
     mock_extraction_components["file_helpers"].get_processed_fpath.return_value = "processed/path.sql"
     mock_extraction_components["file_helpers"].compute_file_hash.return_value = "mockhash123"
     mock_extraction_components["db_manager"].get_file_hash.return_value = None  # File not in DB
+    mock_extraction_components["structural_parser"].parse.return_value = "\nSELECT * FROM dual;", {}
     
     # Create a mock for open() to avoid actual file reading
     mock_file = MagicMock()
