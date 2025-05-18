@@ -13,10 +13,12 @@ dependencies = [
     "pyparsing[diagrams]>=3.2.3",
     "regex>=2024.11.6",
     "tqdm>=4.67.1",
+    "cyclopts>=0.4.6",
+    "tomlkit>=0.13.2",
 ]
 
 [project.scripts]
-plsql-analyzer = "plsql_analyzer:main"
+plsql-analyzer = "plsql_analyzer.cli:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -31,4 +33,5 @@ dev = [
     "pytest-mock>=3.14.0",
     "pytest-xdist[psutil]>=3.6.1",
     "snakeviz>=2.2.2",
+    "tomlkit>=0.13.2",
 ]
