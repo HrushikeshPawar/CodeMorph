@@ -5,7 +5,7 @@ from plsql_analyzer.settings import AppConfig
 def test_default_instantiation():
     config = AppConfig(source_code_root_dir="/tmp")
     assert config.source_code_root_dir == Path("/tmp")
-    assert config.output_base_dir == Path("generated/artifacts")
+    assert config.output_base_dir == Path("generated/artifacts").resolve()
     assert config.log_verbose_level == 1
     assert config.log_file_prefix == "dependency_debug_"
     assert config.log_trace_file_prefix == "dependency_trace_"
