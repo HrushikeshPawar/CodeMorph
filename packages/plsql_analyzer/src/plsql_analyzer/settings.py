@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Any
 from pydantic import BaseModel, Field, field_validator
 import os
 
@@ -10,7 +10,7 @@ class AppConfig(BaseModel):
     # Core configuration fields
     source_code_root_dir: Path = Field(..., description="Root directory containing source code to analyze.")
     output_base_dir: Path = Field(
-        default=Path("generated/artifacts"),
+        default=Path("generated/artifacts").resolve(),
         description="Base directory for all generated artifacts, logs, and outputs."
     )
     log_verbose_level: int = Field(
@@ -63,8 +63,7 @@ class AppConfig(BaseModel):
 
     @field_validator('source_code_root_dir', 'output_base_dir', mode='before')
     @classmethod
-    @classmethod
-    def expand_and_resolve_path(cls, v: 'Any') -> Path:
+    def expand_and_resolve_path(cls, v: Any) -> Path:
         if not isinstance(v, (str, Path)):
             # Return 'v' to let Pydantic attempt its standard parsing and validation for non-str/Path types.
             # This will likely lead to a more informative ValidationError if 'v' is unsuitable for a Path field.
