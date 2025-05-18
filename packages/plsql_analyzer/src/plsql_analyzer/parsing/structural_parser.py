@@ -5,6 +5,7 @@ from pprint import pformat
 import loguru as lg # Assuming logger is passed
 from typing import List, Tuple, Optional, Dict, Any
 from tqdm.auto import tqdm # For progress bar
+from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
 # --- Regular Expressions --- #
 OBJECT_NAME_REGEX = re.compile(
@@ -175,8 +176,8 @@ class PlSqlStructuralParser:
         self.is_forward_decl = False
         self.logger.trace("StructuralParser state reset.")
 
-    def _escape_angle_brackets(self, text: str) -> str:
-        return text.replace("<", "\\<").replace(">", "\\>")
+    # _escape_angle_brackets method has been removed and replaced with
+    # the centralized version from utils.text_utils
 
     def _remove_strings_and_inline_comments(self, line: str, current_inside_quote_state: bool) -> Tuple[str, bool]:
         new_line = ""
@@ -296,7 +297,7 @@ class PlSqlStructuralParser:
             # Check code block since definition for more complex patterns if needed
             # (Simplified check here based on original logic)
             code_block_since_def = "".join(self.lines[scope_line-1 : self.line_num])
-            self.logger.trace(f"L{scope_line}-{self.line_num}: Code Block from Def: `{self._escape_angle_brackets(repr(code_block_since_def.strip()))}`")
+            self.logger.trace(f"L{scope_line}-{self.line_num}: Code Block from Def: `{escape_angle_brackets(repr(code_block_since_def.strip()))}`")
 
             if re.search(rf"PROCEDURE\s+{scope_name.replace('.', r'\.')}\s*\(((?!(\bIS\b|\bAS\b)).)*;", code_block_since_def, re.DOTALL|re.IGNORECASE):
                 # forward_dec_detected = True
@@ -313,7 +314,7 @@ class PlSqlStructuralParser:
         # Pattern 3: Function return clause ending with semicolon
         if scope_type == "FUNCTION":
             code_block_since_def = "".join(self.lines[scope_line-1 : self.line_num])
-            self.logger.trace(f"L{scope_line}-{self.line_num}: Code Block from Def: `{self._escape_angle_brackets(repr(code_block_since_def.strip()))}`")
+            self.logger.trace(f"L{scope_line}-{self.line_num}: Code Block from Def: `{escape_angle_brackets(repr(code_block_since_def.strip()))}`")
             # Check if RETURN type is defined and line ends with ;
             # if re.search(rf"FUNCTION\s+{re.escape(scope_name)}.*?\s*\bRETURN\b\s+\S+\s*;", code_block_since_def, re.IGNORECASE|re.DOTALL):
             #     self.is_forward_decl = True
@@ -376,14 +377,14 @@ class PlSqlStructuralParser:
     def _process_line(self):
         """Processes a single line of code. Uses self.logger for output."""
         line = self.current_line_content
-        self.logger.trace(f"L{self.line_num}: Raw Line: {self._escape_angle_brackets(repr(line))}")
+        self.logger.trace(f"L{self.line_num}: Raw Line: {escape_angle_brackets(repr(line))}")
 
         # 1. Handle Multiline Comments
         if self.inside_multiline_comment:
             if "*/" in line:
                 self.inside_multiline_comment = False
                 line = line.split("*/", 1)[1]
-                self.logger.trace(f"L{self.line_num}: Multiline comment ends. Remaining: `{self._escape_angle_brackets(line.strip())}`")
+                self.logger.trace(f"L{self.line_num}: Multiline comment ends. Remaining: `{escape_angle_brackets(line.strip())}`")
                 
                 if not line.strip():
                     return # Nothing left on line
@@ -399,7 +400,7 @@ class PlSqlStructuralParser:
             if "*/" in after_comment: # Starts and ends on the same line
                 # Handle comment contained entirely within the line
                 line_without_block_comment = before_comment + after_comment.split("*/", 1)[1]
-                self.logger.trace(f"L{self.line_num}: Handled single-line block comment. Remaining: `{self._escape_angle_brackets(line_without_block_comment.strip())}`")
+                self.logger.trace(f"L{self.line_num}: Handled single-line block comment. Remaining: `{escape_angle_brackets(line_without_block_comment.strip())}`")
                 line = line_without_block_comment
                 
                 if not line.strip():
@@ -409,7 +410,7 @@ class PlSqlStructuralParser:
                 # Multiline comment starts here
                 self.inside_multiline_comment = True
                 line = before_comment
-                self.logger.trace(f"L{self.line_num}: Multiline comment starts. Processing before: `{self._escape_angle_brackets(line.strip())}`")
+                self.logger.trace(f"L{self.line_num}: Multiline comment starts. Processing before: `{escape_angle_brackets(line.strip())}`")
                 # Continue processing 'line'
 
         # Skip empty lines after potential comment removal
@@ -426,7 +427,7 @@ class PlSqlStructuralParser:
         #     self.inside_quote = next_inside_quote
         processed_line = line
         self.processed_line_content = processed_line
-        self.logger.trace(f"L{self.line_num}: Processed Line: {self._escape_angle_brackets(repr(processed_line))}")
+        self.logger.trace(f"L{self.line_num}: Processed Line: {escape_angle_brackets(repr(processed_line))}")
         
         # Skip lines that become empty after string/comment removal
         if not processed_line.strip():
@@ -472,7 +473,7 @@ class PlSqlStructuralParser:
 
             if self.forward_decl_candidate:
                 self.forward_decl_check_end_line = self.line_num # Record line where check passed
-                self.logger.trace(f"L{self.line_num}: Forward Declaration pattern matched for {self.forward_decl_candidate[1][1]}: `{self._escape_angle_brackets(text=processed_line.strip())}`")
+                self.logger.trace(f"L{self.line_num}: Forward Declaration pattern matched for {self.forward_decl_candidate[1][1]}: `{escape_angle_brackets(processed_line.strip())}`")
                 self._handle_forward_declaration()
 
                 # Since the forward declaration is handled, we might not need to process the rest of this line?
@@ -783,7 +784,7 @@ class PlSqlStructuralParser:
             try:
                 self._process_line()
             except Exception as e:
-                self.logger.critical(f"Critical error processing line L{self.line_num}: `{self._escape_angle_brackets(line.strip())}`")
+                self.logger.critical(f"Critical error processing line L{self.line_num}: `{escape_angle_brackets(line.strip())}`")
                 self.logger.exception(e) # Log stack trace
                 # Re-raise to stop parsing immediately on critical error
                 raise

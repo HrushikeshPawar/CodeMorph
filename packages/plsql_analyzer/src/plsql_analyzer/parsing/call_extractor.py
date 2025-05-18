@@ -5,6 +5,8 @@ import loguru as lg
 import pyparsing as pp
 from typing import List, Tuple, Dict, NamedTuple
 
+from plsql_analyzer.utils.text_utils import escape_angle_brackets
+
 # Define the named tuple for extracted calls at the module level
 class ExtractedCallTuple(NamedTuple):
     call_name: str
@@ -43,25 +45,8 @@ class CallDetailExtractor:
         self.cleaned_code = ""
         self.literal_mapping = {}
     
-    def _escape_angle_brackets(self, text: str|list|dict) -> str:
-
-        # if isinstance(text, str):
-        #     return text.replace("<", "\\<")
-        
-        # if isinstance(text, list):
-        #     return [comp.replace("<", "\<") for comp in text if isinstance(comp, str)]
-        
-        # if isinstance(text, dict):
-        #     new_dict = {}
-        #     for key, value in text.items():
-        #         new_key = key.replace("<", "\<") if isinstance(key, str) else key
-        #         new_value = value.replace("<", "\<") if isinstance(value, str) else value
-
-        #         new_dict[new_key] = new_value
-            
-        #     return new_dict
-
-        return str(text).replace("<", "\\<")
+    # _escape_angle_brackets method has been removed and replaced with
+    # the centralized version from utils.text_utils
 
     def _record_call(self, s:str, loc:int, toks:pp.ParseResults) -> pp.ParseResults:
        # This method uses self.code_string_for_parsing for line number calculation
@@ -264,14 +249,14 @@ class CallDetailExtractor:
                     param_value_str = "".join(param_value_collector).strip()
                     if param_name_str: # Ensure param name is not empty
                          named_params[param_name_str] = param_value_str
-                         self.logger.trace(f"Found named param: `{param_name_str}` => `{self._escape_angle_brackets(param_value_str)}`")
+                         self.logger.trace(f"Found named param: `{param_name_str}` => `{escape_angle_brackets(param_value_str)}`")
                     else:
                         self.logger.warning(f"Empty parameter name found for call '{call_info.call_name}' with value '{param_value_str}'.")
                 else:
                     param_value_str = "".join(param_value_collector).strip()
                     if param_value_str:
                         positional_params.append(param_value_str)
-                        self.logger.trace(f"Found positional param: `{self._escape_angle_brackets(param_value_str)}`")
+                        self.logger.trace(f"Found positional param: `{escape_angle_brackets(param_value_str)}`")
                 
                 param_value_collector = []
                 param_name_collector = []
@@ -296,14 +281,14 @@ class CallDetailExtractor:
                 param_value_str = "".join(param_value_collector).strip()
                 if param_name_str:
                     named_params[param_name_str] = param_value_str
-                    self.logger.trace(f"Found last named param: `{param_name_str}` => `{self._escape_angle_brackets(param_value_str)}`")
+                    self.logger.trace(f"Found last named param: `{param_name_str}` => `{escape_angle_brackets(param_value_str)}`")
                 else:
-                    self.logger.warning(f"Empty parameter name for last param for call '{call_info.call_name}' with value '{self._escape_angle_brackets(param_value_str)}'.")
+                    self.logger.warning(f"Empty parameter name for last param for call '{call_info.call_name}' with value '{escape_angle_brackets(param_value_str)}'.")
             else:
                 param_value_str = "".join(param_value_collector).strip()
                 if param_value_str:
                     positional_params.append(param_value_str)
-                    self.logger.trace(f"Found last positional param: `{self._escape_angle_brackets(param_value_str)}`")
+                    self.logger.trace(f"Found last positional param: `{escape_angle_brackets(param_value_str)}`")
 
         if param_nested_lvl != 0:
             self.logger.warning(f"Parameter parsing for '{call_info.call_name}' ended with unbalanced parentheses. Nesting level: {param_nested_lvl}. Results might be incomplete.")
@@ -315,15 +300,7 @@ class CallDetailExtractor:
             for name, val in named_params.items()
         }
         
-        # try:
-        self.logger.trace(f"Parameters for '{self._escape_angle_brackets(call_info.call_name)}': Positional={self._escape_angle_brackets(restored_positional_params)}, Named={self._escape_angle_brackets(restored_named_params)}")
-        # except:
-        #     print(f"Call Name: {call_info.call_name}")
-        #     print(f"Positional Args: {restored_positional_params}")
-        #     print(f"Positional Args: {self._escape_angle_brackets(str(restored_positional_params))}")
-        #     print(f"Named Args: {restored_named_params}")
-        #     print(f"Named Args: {self._escape_angle_brackets(restored_named_params)}")
-        #     raise
+        self.logger.trace(f"Parameters for '{escape_angle_brackets(call_info.call_name)}': Positional={escape_angle_brackets(restored_positional_params)}, Named={escape_angle_brackets(restored_named_params)}")
 
         return CallParameterTuple(restored_positional_params, restored_named_params)
 
