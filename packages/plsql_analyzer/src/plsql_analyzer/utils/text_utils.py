@@ -17,4 +17,11 @@ def escape_angle_brackets(text: Union[str, list, dict]) -> str:
         str: The escaped text as a string.
     """
 
-    return str(text).replace("<", "\\<")
+    if isinstance(text, str):
+        escaped_text = text
+    elif isinstance(text, (list, dict)):
+        escaped_text = json.dumps(text)
+    else:
+        raise TypeError("Unsupported type for text. Expected str, list, or dict.")
+
+    return escaped_text.replace("<", "\\<")
