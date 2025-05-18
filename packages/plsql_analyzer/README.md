@@ -144,7 +144,7 @@ The main workflow will:
 *   **`src/plsql_analyzer/persistence/database_manager.py`**:
     The `DatabaseManager` class handles all interactions with the SQLite database. This includes setting up the schema, storing and retrieving file processing status (hashes), and adding/querying `PLSQL_CodeObject` data.
 
-*   **logging_setup.py**:
+*   **`src/plsql_analyzer/utils/logging_setup.py`**:
     The `configure_logger` function sets up `loguru` for console and file-based logging, with configurable verbosity levels.
 
 *   **file_helpers.py**:
