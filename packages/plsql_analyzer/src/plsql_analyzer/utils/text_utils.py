@@ -2,6 +2,7 @@
 Text utility functions for the plsql_analyzer package.
 Contains common text manipulation functions used across modules.
 """
+import json
 from typing import Union
 
 
