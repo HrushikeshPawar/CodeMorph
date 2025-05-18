@@ -80,8 +80,8 @@ def parse(
         "exclude_names_from_processed_path": exclude_dirs,
         "exclude_names_for_package_derivation": exclude_names,
         "database_filename": database_filename,
-        "force_reprocess": force_reprocess,
-        "clear_history_for_file": clear_history_for_file,
+        "force_reprocess": set(force_reprocess) if force_reprocess else None,
+        "clear_history_for_file": set(clear_history_for_file) if clear_history_for_file else None,
     }
 
     # Filter out None values from CLI args to not override TOML/defaults unnecessarily

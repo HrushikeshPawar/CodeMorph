@@ -249,7 +249,6 @@ class ExtractionWorkflow:
             return
 
         try:
-            print(clean_code)
             # Structural parsing returns package name found in code (if any) and dict of objects
             package_name_from_structural_parser, structurally_parsed_objects = self.structural_parser.parse(clean_code)
             structurally_parsed_objects: Dict
