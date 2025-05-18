@@ -4,7 +4,7 @@ import pytest
 from loguru import logger
 from typing import List
 
-from plsql_analyzer import config
+from plsql_analyzer.settings import CALL_EXTRACTOR_KEYWORDS_TO_DROP
 from plsql_analyzer.orchestration.extraction_workflow import clean_code_and_map_literals
 from plsql_analyzer.parsing.call_extractor import CallDetailExtractor, CallDetailsTuple, ExtractedCallTuple, CallParameterTuple
 
@@ -19,7 +19,7 @@ logger.add(
 @pytest.fixture
 def extractor() -> CallDetailExtractor:
     """Provides a CallDetailExtractor instance for tests."""
-    return CallDetailExtractor(logger, config.CALL_EXTRACTOR_KEYWORDS_TO_DROP)
+    return CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP)
 
 # # --- Helper Function for Comparison ---
 # def assert_calls_equal(actual: list[CallDetailsTuple], expected: list[CallDetailsTuple], code: str):
@@ -242,7 +242,7 @@ def test_extract_calls_with_details(extractor:CallDetailExtractor, code, expecte
 
 def test_extract_calls_custom_keywords(caplog):
     """Tests dropping custom keywords."""
-    custom_keywords = ["MY_CUSTOM_FUNC", "ANOTHER_ONE"] + config.CALL_EXTRACTOR_KEYWORDS_TO_DROP
+    custom_keywords = ["MY_CUSTOM_FUNC", "ANOTHER_ONE"] + CALL_EXTRACTOR_KEYWORDS_TO_DROP
     extractor = CallDetailExtractor(logger, custom_keywords)
     code = "BEGIN MY_CUSTOM_FUNC(1); regular_call(2); ANOTHER_ONE; END;"
     clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)

@@ -137,7 +137,7 @@ def run_plsql_analyzer(app_config: AppConfig, logger:'Logger'):
 
     # 4. Initialize and Run the Extraction Workflow
     workflow = ExtractionWorkflow(
-        config=app_config, # Pass the config module/object
+        config=app_config, # Pass the AppConfig instance
         logger=logger,
         db_manager=db_manager,
         structural_parser=structural_parser,
