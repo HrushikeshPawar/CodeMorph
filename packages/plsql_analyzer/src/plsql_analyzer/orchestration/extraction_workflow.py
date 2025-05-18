@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from tqdm.auto import tqdm
 import loguru as lg # Expect logger
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 from plsql_analyzer.settings import AppConfig
 from plsql_analyzer.persistence.database_manager import DatabaseManager
@@ -12,152 +12,10 @@ from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
 from plsql_analyzer.parsing.call_extractor import CallDetailExtractor, ExtractedCallTuple
 from plsql_analyzer.core.code_object import PLSQL_CodeObject, CodeObjectType
 from plsql_analyzer.utils.file_helpers import FileHelpers
+from plsql_analyzer.utils.code_cleaner import clean_code_and_map_literals
 
 
-def clean_code(code: str) -> str:
-    """
-    Removes comments and replaces string literals with placeholders.
-    Based on the user-provided `remove_string_literals_and_comments` function.
-    """
-
-    inside_quote = False
-    inside_inline_comment = False
-    inside_multiline_comment = False
-
-    idx = 0
-    clean_code_chars = [] # Use a list for efficiency, then join
-    current_literal_chars = []
-
-    while idx < len(code):
-        current_char = code[idx]
-        next_char = code[idx + 1] if (idx + 1) < len(code) else None
-
-        if inside_inline_comment:
-            if current_char == "\n":
-                inside_inline_comment = False
-                clean_code_chars.append('\n')
-            idx += 1
-            continue
-
-        if inside_multiline_comment:
-            if f"{current_char}{next_char}" == "*/":
-                inside_multiline_comment = False
-                idx += 2
-            else:
-                idx += 1
-            continue
-        
-        if f"{current_char}{next_char}" == "/*" and not inside_quote:
-            inside_multiline_comment = True
-            idx += 2
-            continue
-
-        if f"{current_char}{next_char}" == "--" and not inside_quote:
-            inside_inline_comment = True
-            idx += 1 # Consume only the first '-' of '--'
-            continue
-        
-        # Handle escaped single quotes within literals
-        if inside_quote and current_char == "'" and next_char == "'":
-            current_literal_chars.append("''") # Keep escaped quote
-            idx += 2
-            continue
-
-        if current_char == "'":
-            inside_quote = not inside_quote
-            clean_code_chars.append("'")
-
-            idx += 1
-            continue
-
-        clean_code_chars.append(current_char)
-        
-        idx += 1
-    
-    cleaned_code  = "".join(clean_code_chars)
-    
-    return cleaned_code
-
-def clean_code_and_map_literals(code: str, logger:lg.Logger) -> Tuple[str, Dict[str, str]]:
-        """
-        Removes comments and replaces string literals with placeholders.
-        Returns the cleaned code and a mapping of placeholders to original literals.
-        """
-        logger.debug("Cleaning code: removing comments and string literals.")
-        literal_mapping: Dict[str, str] = {}
-        inside_quote = False
-        inside_inline_comment = False
-        inside_multiline_comment = False
-
-        idx = 0
-        clean_code_chars = [] 
-        current_literal_chars = []
-
-        while idx < len(code):
-            current_char = code[idx]
-            next_char = code[idx + 1] if (idx + 1) < len(code) else None
-
-            if inside_inline_comment:
-                if current_char == "\n":
-                    inside_inline_comment = False
-                    clean_code_chars.append('\n')
-                idx += 1
-                continue
-
-            if inside_multiline_comment:
-                if f"{current_char}{next_char}" == "*/":
-                    inside_multiline_comment = False
-                    idx += 2
-                else:
-                    idx += 1
-                continue
-            
-            if f"{current_char}{next_char}" == "/*" and not inside_quote:
-                inside_multiline_comment = True
-                idx += 2
-                continue
-
-            if f"{current_char}{next_char}" == "--" and not inside_quote:
-                inside_inline_comment = True
-                idx += 1 
-                continue
-            
-            if inside_quote and current_char == "'" and next_char == "'":
-                current_literal_chars.append("''") 
-                idx += 2
-                continue
-
-            if current_char == "'":
-                inside_quote = not inside_quote
-
-                if not inside_quote: 
-                    literal_name = f"<LITERAL_{len(literal_mapping)}>"
-                    literal_mapping[literal_name] = "".join(current_literal_chars)
-                    current_literal_chars = []
-                    clean_code_chars.append(literal_name) 
-                    clean_code_chars.append("'") 
-                else:
-                    clean_code_chars.append("'")
-
-                idx += 1
-                continue
-            
-            if inside_quote:
-                current_literal_chars.append(current_char)
-            else:
-                clean_code_chars.append(current_char)
-            
-            idx += 1
-        
-        if inside_quote:
-            literal_name = f"<LITERAL_{len(literal_mapping)}>"
-            literal_mapping[literal_name] = "".join(current_literal_chars)
-            current_literal_chars = []
-            clean_code_chars.append(literal_name)
-        
-        cleaned_code_str  = "".join(clean_code_chars)
-        logger.debug(f"Code cleaning complete. Original Code Length: {len(code)}, Cleaned code length: {len(cleaned_code_str)}, Literals found: {len(literal_mapping)}")
-        return cleaned_code_str, literal_mapping
+# Functions removed - now imported from utils.code_cleaner
 
 class ExtractionWorkflow:
     def __init__(self,
@@ -206,7 +64,6 @@ class ExtractionWorkflow:
         #     return new_dict
 
         return str(text).replace("<", "\\<")
-
 
     def _process_single_file(self, fpath: Path):
         self.logger.info(f"Processing File: {self.file_helpers.escape_angle_brackets(str(fpath))}")
@@ -329,6 +186,7 @@ class ExtractionWorkflow:
                 # Call Extraction
                 extracted_calls: List[ExtractedCallTuple] = []
                 try:
+                    # Pass the object source snippet and the already-created literal map to the call extractor
                     extracted_calls = self.call_extractor.extract_calls_with_details(object_source_snippet, literal_map)
                     obj_log_ctx.info(f"Extracted {len(extracted_calls)} calls for {actual_object_name}.")
                 except Exception as e:
@@ -397,7 +255,6 @@ class ExtractionWorkflow:
             # return
 
         self.total_files_processed += 1
-
 
     def run(self):
         self.logger.info("Starting PL/SQL Extraction Workflow...")

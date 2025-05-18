@@ -5,7 +5,7 @@ from loguru import logger
 from typing import List
 
 from plsql_analyzer.settings import CALL_EXTRACTOR_KEYWORDS_TO_DROP
-from plsql_analyzer.orchestration.extraction_workflow import clean_code_and_map_literals
+from plsql_analyzer.utils.code_cleaner import clean_code_and_map_literals
 from plsql_analyzer.parsing.call_extractor import CallDetailExtractor, CallDetailsTuple, ExtractedCallTuple, CallParameterTuple
 
 logger.remove()
@@ -21,77 +21,6 @@ def extractor() -> CallDetailExtractor:
     """Provides a CallDetailExtractor instance for tests."""
     return CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP)
 
-# # --- Helper Function for Comparison ---
-# def assert_calls_equal(actual: list[CallDetailsTuple], expected: list[CallDetailsTuple], code: str):
-#     """Helper function to compare lists of CallDetailsTuple with detailed assertion messages."""
-#     # Sort by start index for consistent comparison order, as parsing order might vary slightly
-#     actual_sorted = sorted(actual, key=lambda c: c.start_idx)
-#     expected_sorted = sorted(expected, key=lambda c: c.start_idx)
-
-#     assert len(actual_sorted) == len(expected_sorted), \
-#         f"Expected {len(expected_sorted)} calls, but found {len(actual_sorted)} in code:\n{code}\nActual: {actual_sorted}\nExpected: {expected_sorted}"
-
-#     for i, (act, exp) in enumerate(zip(actual_sorted, expected_sorted)):
-#         assert act.call_name == exp.call_name, f"Mismatch at index {i} (call_name) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         # Line numbers can be tricky due to preprocessing, focus on name, params, and relative order/indices.
-#         # We compare them but they are less reliable than start_idx for cleaned code.
-#         assert act.line_no == exp.line_no, f"Mismatch at index {i} (line_no) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         assert act.start_idx == exp.start_idx, f"Mismatch at index {i} (start_idx) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         assert act.end_idx == exp.end_idx, f"Mismatch at index {i} (end_idx) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         assert act.positional_params == exp.positional_params, f"Mismatch at index {i} (positional_params) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         assert act.named_params == exp.named_params, f"Mismatch at index {i} (named_params) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-#         # Full tuple comparison as a final check
-#         assert act == exp, f"Mismatch at index {i} (full tuple) in code:\n{code}\nActual: {act}\nExpected: {exp}"
-
-# --- Test _preprocess_code --- #
-
-def test_preprocess_simple(extractor: CallDetailExtractor):
-    code = "BEGIN\n  my_proc('hello'); -- comment\nEND;"
-    expected_clean_code = "BEGIN\n  my_proc('<LITERAL_0>'); \nEND;"
-    expected_literals = {"<LITERAL_0>": "hello"}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
-
-def test_preprocess_multiline_comment(extractor: CallDetailExtractor):
-    code = "/* Multi\nline\ncomment */\nmy_func(1);"
-    expected_clean_code = "\nmy_func(1);"
-    expected_literals = {}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
-
-def test_preprocess_escaped_quotes(extractor: CallDetailExtractor):
-    code = "call_me('O''Malley');"
-    expected_clean_code = "call_me('<LITERAL_0>');"
-    expected_literals = {"<LITERAL_0>": "O''Malley"}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
-
-def test_preprocess_no_literals_or_comments(extractor: CallDetailExtractor):
-    code = "a := b + c;"
-    expected_clean_code = "a := b + c;"
-    expected_literals = {}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
-
-def test_preprocess_empty_string(extractor: CallDetailExtractor):
-    code = ""
-    expected_clean_code = ""
-    expected_literals = {}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
-
-def test_preprocess_only_comments(extractor: CallDetailExtractor):
-    code = "-- line comment\n/* block comment */"
-    expected_clean_code = "\n" # Newline remains from line comment
-    expected_literals = {}
-    extractor._preprocess_code(code)
-    assert extractor.cleaned_code == expected_clean_code
-    assert extractor.literal_mapping == expected_literals
 
 # --- Test extract_calls_with_details (Main Integration Test) --- #
 @pytest.mark.parametrize("code, expected_calls", [
@@ -385,35 +314,6 @@ def test_parameter_parsing_edge_cases(extractor: CallDetailExtractor):
     assert results_no_indices == expected_no_indices
     # If indices need strict checking, they must be calculated precisely for the `code` string.
     # assert results == expected # Use this line if indices are calculated correctly.
-
-# --- Tests for Preprocessing --- #
-@pytest.mark.parametrize(
-    "code, expected_cleaned_contains, expected_cleaned_not_contains, expected_literals_count, expected_literal_values",
-    [
-        ("simple code", ["simple code"], ["--", "/*", "<LITERAL_"], 0, []),
-        ("-- comment\ncode", ["code"], ["-- comment", "<LITERAL_"], 0, []),
-        ("/* block */code", ["code"], ["/* block */", "<LITERAL_"], 0, []),
-        ("code 'literal'", ["code '<LITERAL_0>'"], ["'literal'"], 1, ["literal"]),
-        ("code 'lit''eral'", ["code '<LITERAL_0>'"], ["'lit''eral'"], 1, ["lit''eral"]),
-        ("code 'lit1' -- comment 'lit2'\n 'lit3'", ["code '<LITERAL_0>'", "<LITERAL_1>"], ["'lit1'", "'lit2'", "'lit3'", "-- comment"], 2, ["lit1", "lit3"]),
-        ("code /* 'lit_in_comment' */ 'lit_after'", ["code", "'<LITERAL_0>'"], ["'lit_in_comment'", "'lit_after'", "/*"], 1, ["lit_after"]),
-        # ("q'#delimited string#'", ["q'#delimited string#'"], [], 0, []), # Assuming q-quoting isn't handled yet
-    ],
-    ids=["plain", "inline_comment", "block_comment", "simple_literal", "escaped_literal", "mixed_comment_literal", "literal_in_block"] #, "q_quote_unhandled"]
-)
-def test_preprocess_code(extractor: CallDetailExtractor, code: str, expected_cleaned_contains: list[str], expected_cleaned_not_contains: list[str], expected_literals_count: int, expected_literal_values: list[str]):
-    """Tests the _preprocess_code method directly."""
-    extractor._reset_internal_state()
-    extractor._preprocess_code(code)
-
-    for item in expected_cleaned_contains:
-        assert item in extractor.cleaned_code
-    for item in expected_cleaned_not_contains:
-        assert item not in extractor.cleaned_code
-
-    assert len(extractor.literal_mapping) == expected_literals_count
-    # Compare values without the outer quotes added by the preprocessor
-    assert sorted(extractor.literal_mapping.values()) == sorted(expected_literal_values)
 
 # --- Tests for Parameter Extraction Logic (More focused) --- #
 # Helper to restore literals for parameter tests
