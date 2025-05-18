@@ -161,7 +161,7 @@ def clean_code_and_map_literals(code: str, logger:lg.Logger) -> Tuple[str, Dict[
 
 class ExtractionWorkflow:
     def __init__(self,
-                    config: 'AppConfig', # Pass the loaded config module or a config object/dict
+                    config: AppConfig, # Now expects an AppConfig instance
                     logger: lg.Logger,
                     db_manager: 'DatabaseManager',
                     structural_parser: 'PlSqlStructuralParser',
