@@ -94,7 +94,7 @@ The following options are available for the `analyze` command:
     *   Example: `plsql-analyzer analyze --source-dir ./my_plsql_project/src`
 *   `--output-dir DIRECTORY`: Specifies the base directory where analysis artifacts (database, logs, etc.) will be stored.
     *   Example: `plsql-analyzer analyze --output-dir ./analysis_results`
-*   `--config-file FILE`: Specifies the path to a custom configuration TOML file. If not provided, the tool looks for `plsql_analyzer_config.toml` in the current directory.
+*   `--config-file FILE`: Specifies the path to a custom configuration TOML file. If not provided falls back to default values or other cli options given.
     *   Example: `plsql-analyzer analyze --config-file ./custom_config.toml`
 *   `-v, --verbose INTEGER`: Sets the verbosity level for logging.
     *   `0`: ERROR
@@ -116,7 +116,7 @@ The following options are available for the `analyze` command:
 The PL/SQL Analyzer can be configured using a TOML file, typically named `plsql_analyzer_config.toml`.
 
 *   **Purpose**: The TOML configuration file allows you to set various parameters for the analysis process, providing more granular control than CLI arguments alone.
-*   **Default Location**: The tool looks for `plsql_analyzer_config.toml` in the current working directory by default. You can specify a different location using the `--config-file` CLI option.
+*   **Location**: You can specify a different location using the `--config-file` CLI option.
 *   **Interaction with CLI Arguments**: CLI arguments generally override the corresponding settings in the configuration file. For example, if `source_code_root_dir` is set in the TOML file and `--source-dir` is also provided on the command line, the CLI value will be used.
 
 ### Key Configuration Parameters
