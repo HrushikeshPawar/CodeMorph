@@ -3,165 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 from tqdm.auto import tqdm
 import loguru as lg # Expect logger
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
-from plsql_analyzer import config # Assuming config is passed as an object or dict
+from plsql_analyzer.settings import AppConfig
 from plsql_analyzer.persistence.database_manager import DatabaseManager
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
 from plsql_analyzer.parsing.call_extractor import CallDetailExtractor, ExtractedCallTuple
 from plsql_analyzer.core.code_object import PLSQL_CodeObject, CodeObjectType
 from plsql_analyzer.utils.file_helpers import FileHelpers
+from plsql_analyzer.utils.code_cleaner import clean_code_and_map_literals
+from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
 
-def clean_code(code: str) -> str:
-    """
-    Removes comments and replaces string literals with placeholders.
-    Based on the user-provided `remove_string_literals_and_comments` function.
-    """
-
-    inside_quote = False
-    inside_inline_comment = False
-    inside_multiline_comment = False
-
-    idx = 0
-    clean_code_chars = [] # Use a list for efficiency, then join
-    current_literal_chars = []
-
-    while idx < len(code):
-        current_char = code[idx]
-        next_char = code[idx + 1] if (idx + 1) < len(code) else None
-
-        if inside_inline_comment:
-            if current_char == "\n":
-                inside_inline_comment = False
-                clean_code_chars.append('\n')
-            idx += 1
-            continue
-
-        if inside_multiline_comment:
-            if f"{current_char}{next_char}" == "*/":
-                inside_multiline_comment = False
-                idx += 2
-            else:
-                idx += 1
-            continue
-        
-        if f"{current_char}{next_char}" == "/*" and not inside_quote:
-            inside_multiline_comment = True
-            idx += 2
-            continue
-
-        if f"{current_char}{next_char}" == "--" and not inside_quote:
-            inside_inline_comment = True
-            idx += 1 # Consume only the first '-' of '--'
-            continue
-        
-        # Handle escaped single quotes within literals
-        if inside_quote and current_char == "'" and next_char == "'":
-            current_literal_chars.append("''") # Keep escaped quote
-            idx += 2
-            continue
-
-        if current_char == "'":
-            inside_quote = not inside_quote
-            clean_code_chars.append("'")
-
-            idx += 1
-            continue
-
-        clean_code_chars.append(current_char)
-        
-        idx += 1
-    
-    cleaned_code  = "".join(clean_code_chars)
-    
-    return cleaned_code
-
-def clean_code_and_map_literals(code: str, logger:lg.Logger) -> Tuple[str, Dict[str, str]]:
-        """
-        Removes comments and replaces string literals with placeholders.
-        Returns the cleaned code and a mapping of placeholders to original literals.
-        """
-        logger.debug("Cleaning code: removing comments and string literals.")
-        literal_mapping: Dict[str, str] = {}
-        inside_quote = False
-        inside_inline_comment = False
-        inside_multiline_comment = False
-
-        idx = 0
-        clean_code_chars = [] 
-        current_literal_chars = []
-
-        while idx < len(code):
-            current_char = code[idx]
-            next_char = code[idx + 1] if (idx + 1) < len(code) else None
-
-            if inside_inline_comment:
-                if current_char == "\n":
-                    inside_inline_comment = False
-                    clean_code_chars.append('\n')
-                idx += 1
-                continue
-
-            if inside_multiline_comment:
-                if f"{current_char}{next_char}" == "*/":
-                    inside_multiline_comment = False
-                    idx += 2
-                else:
-                    idx += 1
-                continue
-            
-            if f"{current_char}{next_char}" == "/*" and not inside_quote:
-                inside_multiline_comment = True
-                idx += 2
-                continue
-
-            if f"{current_char}{next_char}" == "--" and not inside_quote:
-                inside_inline_comment = True
-                idx += 1 
-                continue
-            
-            if inside_quote and current_char == "'" and next_char == "'":
-                current_literal_chars.append("''") 
-                idx += 2
-                continue
-
-            if current_char == "'":
-                inside_quote = not inside_quote
-
-                if not inside_quote: 
-                    literal_name = f"<LITERAL_{len(literal_mapping)}>"
-                    literal_mapping[literal_name] = "".join(current_literal_chars)
-                    current_literal_chars = []
-                    clean_code_chars.append(literal_name) 
-                    clean_code_chars.append("'") 
-                else:
-                    clean_code_chars.append("'")
-
-                idx += 1
-                continue
-            
-            if inside_quote:
-                current_literal_chars.append(current_char)
-            else:
-                clean_code_chars.append(current_char)
-            
-            idx += 1
-        
-        if inside_quote:
-            literal_name = f"<LITERAL_{len(literal_mapping)}>"
-            literal_mapping[literal_name] = "".join(current_literal_chars)
-            current_literal_chars = []
-            clean_code_chars.append(literal_name)
-        
-        cleaned_code_str  = "".join(clean_code_chars)
-        logger.debug(f"Code cleaning complete. Original Code Length: {len(code)}, Cleaned code length: {len(cleaned_code_str)}, Literals found: {len(literal_mapping)}")
-        return cleaned_code_str, literal_mapping
+# Functions removed - now imported from utils.code_cleaner
 
 class ExtractionWorkflow:
     def __init__(self,
-                    config: 'config', # Pass the loaded config module or a config object/dict
+                    config: AppConfig, # Now expects an AppConfig instance
                     logger: lg.Logger,
                     db_manager: 'DatabaseManager',
                     structural_parser: 'PlSqlStructuralParser',
@@ -185,33 +44,13 @@ class ExtractionWorkflow:
         self.total_objects_failed_signature = 0
         self.total_objects_failed_calls = 0
         self.total_objects_failed_db_add = 0
-
-    def _escape_angle_brackets(self, text: str|list|dict) -> str:
-
-        # if isinstance(text, str):
-        #     return text.replace("<", "\\<")
-        
-        # if isinstance(text, list):
-        #     return [comp.replace("<", "\<") for comp in text if isinstance(comp, str)]
-        
-        # if isinstance(text, dict):
-        #     new_dict = {}
-        #     for key, value in text.items():
-        #         new_key = key.replace("<", "\<") if isinstance(key, str) else key
-        #         new_value = value.replace("<", "\<") if isinstance(value, str) else value
-
-        #         new_dict[new_key] = new_value
-            
-        #     return new_dict
-
-        return str(text).replace("<", "\\<")
-
+        self.total_files_force_reprocessed = 0
 
     def _process_single_file(self, fpath: Path):
         self.logger.info(f"Processing File: {self.file_helpers.escape_angle_brackets(str(fpath))}")
         
         processed_fpath = self.file_helpers.get_processed_fpath(
-            fpath, self.config.EXCLUDE_FROM_PROCESSED_PATH
+            fpath, self.config.exclude_names_from_processed_path
         )
         current_file_hash = self.file_helpers.compute_file_hash(fpath)
 
@@ -221,13 +60,19 @@ class ExtractionWorkflow:
             return
 
         stored_hash = self.db_manager.get_file_hash(str(processed_fpath))
-
-        if stored_hash == current_file_hash:
+        
+        # Check if this file should be force reprocessed
+        force_reprocess = str(fpath) in self.config.force_reprocess or str(processed_fpath) in self.config.force_reprocess
+        if force_reprocess:
+            self.logger.info(f"Force reprocessing: {processed_fpath} (ignoring hash check)")
+            self.total_files_force_reprocessed += 1
+        elif stored_hash == current_file_hash:
             self.logger.info(f"Skipping (unchanged): {processed_fpath} (Hash: {current_file_hash[:10]}...)")
             self.total_files_skipped_unchanged +=1
             return
         
-        self.logger.info(f"Change detected (or new file): {processed_fpath} "
+        # If we're here, file is either changed, new, or forced to reprocess
+        self.logger.info(f"{'Force reprocessing' if force_reprocess else 'Change detected (or new file)'}: {processed_fpath} "
                          f"(Stored: {stored_hash[:10] if stored_hash else 'None'}, Current: {current_file_hash[:10]}...)")
 
         try:
@@ -238,7 +83,7 @@ class ExtractionWorkflow:
             clean_code, literal_map = clean_code_and_map_literals(code_content, self.logger)
             code_lines = clean_code.splitlines() # Keep for extracting source snippets
         except Exception as e:
-            self.logger.error(f"Failed to read file {fpath}: {self._escape_angle_brackets(e)}")
+            self.logger.error(f"Failed to read file {fpath}: {escape_angle_brackets(e)}")
             return
 
         try:
@@ -246,7 +91,7 @@ class ExtractionWorkflow:
             package_name_from_structural_parser, structurally_parsed_objects = self.structural_parser.parse(clean_code)
             structurally_parsed_objects: Dict
         except Exception as e:
-            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {self._escape_angle_brackets(e)}")
+            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {escape_angle_brackets(e)}")
             self.total_files_failed_structure_parse +=1
             return
             
@@ -255,8 +100,8 @@ class ExtractionWorkflow:
         final_package_name_for_file_objects = self.file_helpers.derive_package_name_from_path(
             package_name_from_structural_parser,
             fpath,
-            self.config.FILE_EXTENSION,
-            self.config.EXCLUDE_FROM_PATH_FOR_PACKAGE_DERIVATION
+            self.config.file_extensions_to_include,
+            self.config.exclude_names_for_package_derivation
         )
         self.logger.info(f"Derived package context for objects in {fpath.name} as: '{final_package_name_for_file_objects}'")
 
@@ -299,7 +144,7 @@ class ExtractionWorkflow:
                     # Signature parser is designed to find signature within this.
                     parsed_signature_data = self.signature_parser.parse(object_source_snippet)
                 except Exception as e:
-                    obj_log_ctx.exception(f"Error during signature parsing for {obj_key_name}: {self._escape_angle_brackets(e)}")
+                    obj_log_ctx.exception(f"Error during signature parsing for {obj_key_name}: {escape_angle_brackets(e)}")
                     self.total_objects_failed_signature += 1
                     file_level_processing_error_occurred = True
                     # Continue, object might be stored with minimal info
@@ -322,10 +167,11 @@ class ExtractionWorkflow:
                 # Call Extraction
                 extracted_calls: List[ExtractedCallTuple] = []
                 try:
+                    # Pass the object source snippet and the already-created literal map to the call extractor
                     extracted_calls = self.call_extractor.extract_calls_with_details(object_source_snippet, literal_map)
                     obj_log_ctx.info(f"Extracted {len(extracted_calls)} calls for {actual_object_name}.")
                 except Exception as e:
-                    obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {self._escape_angle_brackets(e)}")
+                    obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {escape_angle_brackets(e)}")
                     self.total_objects_failed_calls += 1
                     file_level_processing_error_occurred = True
 
@@ -391,19 +237,20 @@ class ExtractionWorkflow:
 
         self.total_files_processed += 1
 
-
     def run(self):
         self.logger.info("Starting PL/SQL Extraction Workflow...")
         
-        source_folder = Path(self.config.SOURCE_CODE_ROOT_DIR)
+        source_folder = Path(self.config.source_code_root_dir)
         if not source_folder.is_dir():
             self.logger.critical(f"Source code directory does not exist or is not a directory: {source_folder}")
             return
 
         # Using rglob to find all files matching the extension recursively
-        files_to_process = list(source_folder.rglob(f'*.{self.config.FILE_EXTENSION.lstrip(".")}'))
-        
-        self.logger.info(f"Found {len(files_to_process)} files with extension ' .{self.config.FILE_EXTENSION} ' in {source_folder}")
+        files_to_process = []
+        for extension in self.config.file_extensions_to_include:
+            self.logger.info(f"Searching for files with extension: {extension}")
+            # Using rglob to find all files matching the extension recursively
+            files_to_process.extend(list(source_folder.rglob(f"*.{extension}")))
 
         if not files_to_process:
             self.logger.warning("No files found to process. Exiting workflow.")
@@ -428,6 +275,7 @@ class ExtractionWorkflow:
         self.logger.info("--- Extraction Summary ---")
         self.logger.info(f"Total files processed: {self.total_files_processed}")
         self.logger.info(f"Files skipped (unchanged): {self.total_files_skipped_unchanged}")
+        self.logger.info(f"Files force reprocessed: {self.total_files_force_reprocessed}")
         self.logger.info(f"Files failed hashing: {self.total_files_failed_hash}")
         self.logger.info(f"Files failed structural parsing: {self.total_files_failed_structure_parse}")
         self.logger.info(f"Total code objects extracted and stored: {self.total_objects_extracted}")

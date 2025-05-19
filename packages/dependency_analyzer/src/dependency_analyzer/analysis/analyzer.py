@@ -2,6 +2,7 @@ from __future__ import annotations
 import networkx as nx
 import loguru as lg # type: ignore
 from typing import List, Dict, Set, Optional, Generator, Tuple
+import re
 
 # Assuming plsql_analyzer is a package accessible in the Python path.
 # This import might be needed if we directly access PLSQL_CodeObject attributes like type.
@@ -416,6 +417,247 @@ def get_connected_components(
         logger.error(f"Error finding {component_type} connected components: {e}", exc_info=True)
         return []
 
+
+def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> None:
+    """
+    Calculates and stores complexity metrics for each PLSQL_CodeObject node in the graph.
+    Metrics:
+        - loc: Lines of Code (LOC) based on clean_code
+        - num_params: Number of parameters (parsed_parameters)
+        - num_calls_made: Number of outgoing calls (unique callees in extracted_calls)
+        - acc: Approximate Cyclomatic Complexity (heuristic based on control flow keywords)
+    Stores metrics as node attributes: 'loc', 'num_params', 'num_calls_made', 'acc'.
+    """
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot calculate complexity metrics.")
+        return
+
+    # Decision-point keywords for ACC (case-insensitive, word boundaries)
+    # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
+    # Python's regex lookbehind must be fixed-width, so we can't use (?<!end\s*)
+    # Instead, match all, then filter out those preceded by 'end' and whitespace in post-processing
+    keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
+    acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
+
+    def is_false_positive(match):
+        # Get up to 10 chars before the match
+        start = match.start()
+        before = obj.clean_code[max(0, start-10):start].lower()
+        # Check for 'end' followed by whitespace right before the keyword
+        return bool(re.search(r'end\s*$', before))
+
+    for node_id, node_data in graph.nodes(data=True):
+        obj = node_data.get('object')
+        if obj is None:
+            logger.warning(f"Node '{node_id}' missing 'object' attribute. Skipping complexity metrics.")
+            continue
+        # LOC
+        loc = len(obj.clean_code.splitlines()) if obj.clean_code else 0
+        # Number of parameters
+        num_params = len(obj.parsed_parameters) if hasattr(obj, 'parsed_parameters') and obj.parsed_parameters else 0
+        # Number of outgoing calls (unique callees)
+        if hasattr(obj, 'extracted_calls') and obj.extracted_calls:
+            unique_callees = set(getattr(call, 'call_name', None) for call in obj.extracted_calls if hasattr(call, 'call_name'))
+            num_calls_made = len(unique_callees)
+        else:
+            num_calls_made = 0
+        # Approximate Cyclomatic Complexity (ACC)
+        if obj.clean_code:
+            matches = list(acc_pattern.finditer(obj.clean_code))
+            acc_count = sum(1 for m in matches if not is_false_positive(m))
+            acc = acc_count + 1
+        else:
+            acc = 1
+        # Store metrics as node attributes
+        graph.nodes[node_id]['loc'] = loc
+        graph.nodes[node_id]['num_params'] = num_params
+        graph.nodes[node_id]['num_calls_made'] = num_calls_made
+        graph.nodes[node_id]['acc'] = acc
+        logger.debug(f"Node '{node_id}': LOC={loc}, Params={num_params}, Calls={num_calls_made}, ACC={acc}")
+
+def get_descendants(graph: nx.DiGraph, source_node: str, depth_limit: Optional[int] = None) -> Set[str]:
+    """
+    Returns the set of all descendant nodes (reachable from source_node) in the graph.
+    If depth_limit is None, returns all descendants. Otherwise, limits traversal depth.
+
+    Args:
+        graph: The NetworkX DiGraph.
+        source_node: The node from which to find descendants.
+        depth_limit: Optional maximum depth for traversal.
+
+    Returns:
+        Set of descendant node IDs (excluding source_node itself).
+    """
+    if source_node not in graph:
+        return set()
+    if depth_limit is None:
+        return nx.descendants(graph, source_node)
+    # BFS tree includes the source node, so remove it
+    return set(nx.bfs_tree(graph, source_node, depth_limit=depth_limit).nodes()) - {source_node}
+
+
+def get_ancestors(graph: nx.DiGraph, target_node: str, depth_limit: Optional[int] = None) -> Set[str]:
+    """
+    Returns the set of all ancestor nodes (can reach target_node) in the graph.
+    If depth_limit is None, returns all ancestors. Otherwise, limits traversal depth.
+
+    Args:
+        graph: The NetworkX DiGraph.
+        target_node: The node for which to find ancestors.
+        depth_limit: Optional maximum depth for traversal.
+
+    Returns:
+        Set of ancestor node IDs (excluding target_node itself).
+    """
+    if target_node not in graph:
+        return set()
+    if depth_limit is None:
+        return nx.ancestors(graph, target_node)
+    # Use reversed graph for upstream traversal
+    return set(nx.bfs_tree(graph.reverse(copy=False), target_node, depth_limit=depth_limit).nodes()) - {target_node}
+def trace_downstream_paths(
+    graph: nx.DiGraph,
+    source_node: str,
+    logger: lg.Logger,
+    depth_limit: Optional[int] = None,
+    target_node: Optional[str] = None
+) -> List[List[str]]:
+    """
+    Trace all simple execution paths downstream from a selected node in the dependency graph.
+    Paths can be limited by depth or traced to a specific target node.
+
+    Args:
+        graph: The NetworkX DiGraph representing dependencies.
+        source_node: The node from which to start tracing.
+        logger: A Loguru logger instance.
+        depth_limit: Optional maximum path length (number of edges).
+        target_node: Optional target node to trace paths to.
+
+    Returns:
+        A list of paths (each path is a list of node IDs). Returns an empty list if no paths found or nodes are missing.
+    """
+    logger.info(f"Tracing downstream paths from '{source_node}' (depth_limit={depth_limit}, target_node={target_node})...")
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot trace downstream paths.")
+        return []
+    if source_node not in graph:
+        logger.warning(f"Source node '{source_node}' not found in graph.")
+        return []
+    if target_node is not None and target_node not in graph:
+        logger.warning(f"Target node '{target_node}' not found in graph.")
+        return []
+
+    try:
+        if target_node:
+            # Use all_simple_paths with cutoff if provided
+            logger.debug(f"Tracing all simple paths from '{source_node}' to '{target_node}' (cutoff={depth_limit})...")
+            paths = list(nx.all_simple_paths(graph, source=source_node, target=target_node, cutoff=depth_limit))
+            logger.info(f"Found {len(paths)} paths from '{source_node}' to '{target_node}'.")
+            return paths
+        else:
+            # No target: find all simple paths from source to all reachable nodes (up to depth_limit)
+            # Use DFS to enumerate all simple paths up to depth_limit (path length = number of edges)
+            def dfs(current_path: List[str], depth: int):
+                current_node = current_path[-1]
+                if depth_limit is not None and depth >= depth_limit:
+                    return
+                for neighbor in graph.successors(current_node):
+                    if neighbor in current_path:
+                        continue  # avoid cycles
+                    new_path = current_path + [neighbor]
+                    paths_found.append(new_path)
+                    dfs(new_path, depth + 1)
+            paths_found: List[List[str]] = []
+            dfs([source_node], 0)
+            logger.info(f"Found {len(paths_found)} downstream paths from '{source_node}'.")
+            return paths_found
+    except Exception as e:
+        logger.error(f"Error tracing downstream paths from '{source_node}': {e}", exc_info=True)
+        return []
+def classify_nodes(
+    graph: nx.DiGraph,
+    logger: lg.Logger,
+    complexity_metrics_available: bool = False,
+    hub_degree_percentile: float = 0.95,
+    hub_betweenness_percentile: float = 0.95,
+    hub_pagerank_percentile: float = 0.95,
+    utility_out_degree_percentile: float = 0.90,
+    utility_max_complexity: int = 50,
+    orphan_component_max_size: int = 4
+) -> None:
+    """
+    Classifies nodes in the dependency graph into architectural roles: Hubs, Utilities, Orphans, etc.
+    Adds a 'node_role' attribute (list of roles) to each node.
+
+    Args:
+        graph: The NetworkX DiGraph to classify.
+        logger: A Loguru logger instance.
+        complexity_metrics_available: If True, use node complexity for utility classification.
+        hub_degree_percentile: Percentile for degree threshold (default: 95th).
+        hub_betweenness_percentile: Percentile for betweenness threshold (default: 95th).
+        hub_pagerank_percentile: Percentile for PageRank threshold (default: 95th).
+        utility_out_degree_percentile: Percentile for utility out-degree (default: 90th).
+        utility_max_complexity: Max complexity for utility nodes (if available).
+        orphan_component_max_size: Max size for a component to be considered orphaned.
+    """
+    import numpy as np
+    logger.info("Classifying nodes by architectural role...")
+    # --- Degree metrics ---
+    degrees = dict(graph.degree())
+    in_degrees = dict(graph.in_degree())
+    out_degrees = dict(graph.out_degree())
+    # --- Centrality metrics ---
+    betweenness = nx.betweenness_centrality(graph, normalized=True)
+    pagerank = nx.pagerank(graph)
+    # --- Connected components ---
+    wccs = list(nx.weakly_connected_components(graph))
+    largest_wcc = max(wccs, key=len) if wccs else set()
+    # --- Thresholds (percentile-based) ---
+    degree_values = np.array(list(degrees.values()))
+    betweenness_values = np.array(list(betweenness.values()))
+    pagerank_values = np.array(list(pagerank.values()))
+    out_degree_values = np.array(list(out_degrees.values()))
+    hub_degree_thresh = np.percentile(degree_values, hub_degree_percentile * 100)
+    hub_betweenness_thresh = np.percentile(betweenness_values, hub_betweenness_percentile * 100)
+    hub_pagerank_thresh = np.percentile(pagerank_values, hub_pagerank_percentile * 100)
+    utility_out_degree_thresh = np.percentile(out_degree_values, utility_out_degree_percentile * 100)
+    # --- Complexity metrics (if available) ---
+    node_complexity = {}
+    if complexity_metrics_available:
+        for node_id, data in graph.nodes(data=True):
+            node_complexity[node_id] = data.get('loc', 0)  # Use 'loc' as a proxy
+    # --- Assign roles ---
+    for node_id in graph.nodes():
+        roles = []
+        # Hubs/connectors
+        if (
+            degrees[node_id] >= hub_degree_thresh or
+            betweenness[node_id] >= hub_betweenness_thresh or
+            pagerank[node_id] >= hub_pagerank_thresh
+        ):
+            roles.append('hub')
+        # Utility nodes
+        if out_degrees[node_id] >= utility_out_degree_thresh:
+            if complexity_metrics_available:
+                if node_complexity.get(node_id, 0) <= utility_max_complexity:
+                    roles.append('utility')
+            else:
+                roles.append('utility')
+        # Orphaned component members
+        for comp in wccs:
+            if node_id in comp and len(comp) <= orphan_component_max_size and comp != largest_wcc:
+                roles.append('orphan_component_member')
+                break
+        # Entry/terminal points (reuse existing logic)
+        if in_degrees[node_id] == 0:
+            roles.append('entry_point')
+        if out_degrees[node_id] == 0:
+            roles.append('terminal_node')
+        graph.nodes[node_id]['node_role'] = roles
+        logger.debug(f"Node {node_id}: roles={roles}")
+    logger.info("Node classification complete.")
+
+
 # --- Example Usage (Illustrative) ---
 if __name__ == '__main__':
     # Basic Logger Setup for Example
@@ -572,5 +814,22 @@ if __name__ == '__main__':
     example_logger.info(f"Weakly Connected Components ({len(wcc)}):")
     for i, comp in enumerate(wcc):
         example_logger.info(f"  WCC {i+1}: {comp}")
+
+    # --- Test trace_downstream_paths ---
+    example_logger.info("\\n--- Testing trace_downstream_paths ---")
+    traced_paths_A = trace_downstream_paths(mock_graph, "pkg.procA", example_logger, depth_limit=2)
+    # From pkg.procA, within 2 steps: to pkg.procB, pkg.procC, standalone_func
+    # Paths: [['pkg.procA', 'pkg.procB'], ['pkg.procA', 'pkg.procB', 'pkg.procC']]
+    example_logger.info(f"Traced downstream paths from 'pkg.procA' (depth 2): {traced_paths_A}")
+
+    traced_paths_standalone = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=2)
+    # From standalone_func, within 2 steps: to pkg.procA, util.helper
+    # Paths: [['standalone_func', 'pkg.procA'], ['standalone_func', 'pkg.procA', 'pkg.procB'], ['standalone_func', 'util.helper'], ['standalone_func', 'util.helper', 'external.api']]
+    example_logger.info(f"Traced downstream paths from 'standalone_func' (depth 2): {traced_paths_standalone}")
+
+    traced_paths_to_external = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=3, target_node="external.api")
+    # From standalone_func to external.api, within 3 steps: util.helper -> external.api
+    # Paths: [['standalone_func', 'util.helper', 'external.api']]
+    example_logger.info(f"Traced downstream paths to 'external.api' from 'standalone_func' (depth 3): {traced_paths_to_external}")
 
     example_logger.info("\\nAnalyzer example finished.")

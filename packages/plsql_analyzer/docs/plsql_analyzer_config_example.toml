@@ -1,0 +1,144 @@
+# PL/SQL Analyzer Configuration Example
+# This file provides a comprehensive example of how to configure the PL/SQL Analyzer.
+# Settings in this file can be overridden by command-line arguments.
+
+# Core configuration fields
+# -------------------------
+# source_code_root_dir: Specifies the root directory containing the PL/SQL source code.
+# This is a **required** field if not provided via the --source-dir CLI argument.
+source_code_root_dir = "./my_project/plsql_sources" 
+
+# output_base_dir: Specifies the base directory where analysis artifacts (database, logs, etc.) will be stored.
+# This is a **required** field if not provided via the --output-dir CLI argument.
+output_base_dir = "./analysis_output"
+
+# Logging and verbosity
+# ---------------------
+# log_verbose_level: Sets the verbosity level for logging.
+#   0 = ERROR: Only errors are logged.
+#   1 = INFO: Informational messages, warnings, and errors are logged (default).
+#   2 = DEBUG: Detailed debugging information is logged.
+#   3 = TRACE: Very verbose logging, including parser rule entry/exit (for deep debugging).
+log_verbose_level = 1  # Default: 1 (INFO)
+
+# Database settings
+# -----------------
+# database_filename: The name of the SQLite database file where analysis results will be stored.
+# This file will be created within the 'output_base_dir'.
+database_filename = "PLSQL_CodeObjects.db"  # Default: "PLSQL_CodeObjects.db"
+
+# File selection patterns
+# -----------------------
+# file_extensions_to_include: A list of file extensions that the analyzer should consider as PL/SQL files.
+# The analyzer will scan for files with these extensions within the 'source_code_root_dir'.
+file_extensions_to_include = [
+    "sql",   # Standard SQL files
+    "pks",   # Package specifications
+    "pkb",   # Package bodies
+    "fnc",   # Functions (if stored separately)
+    "prc",   # Procedures (if stored separately)
+    "trg"    # Triggers
+]
+
+# Directory and file exclusions
+# -----------------------------
+# exclude_names_from_processed_path: A list of directory or file name patterns to exclude from processing.
+# This is useful for ignoring version control directories, temporary files, or specific sub-projects.
+# Patterns are matched against parts of the file path.
+# Example: If you have "src/.svn/some_file.sql", adding ".svn" here will exclude it.
+exclude_names_from_processed_path = [
+    ".git",           # Git version control
+    ".svn",           # SVN version control
+    "temp",           # Temporary files
+    "__pycache__",    # Python cache files
+    "old_versions",   # Legacy code archives
+    "test_data"       # Test data that should be ignored
+]
+
+# exclude_names_for_package_derivation: A list of directory names to exclude when the analyzer
+# attempts to derive a package name from a file's path.
+# For example, if your PL/SQL files are organized like 'schema_name/packages/my_package.pks',
+# and you include "packages" in this list, the analyzer might derive 'schema_name.my_package'
+# instead of 'schema_name.packages.my_package'.
+# This helps in creating more natural package/object names.
+exclude_names_for_package_derivation = [
+    "PROCEDURES",      # Common directory name for procedures
+    "PACKAGE_BODIES",  # Directory for package bodies
+    "FUNCTIONS",       # Common directory name for functions
+    "PACKAGES",        # Common directory name for packages
+    "TRIGGERS",        # Common directory name for triggers
+    "VIEWS",           # Common directory name for views
+    "TYPES",           # Common directory name for types
+    "SOURCE",          # Generic source code directory
+    "SQL"              # Generic SQL directory
+]
+
+# Performance settings
+# --------------------
+# enable_profiler: Set to true to enable performance profiling of the analyzer.
+# Profiling results are typically saved in the logs directory and can help identify bottlenecks.
+# This can also be controlled by the --profile / --no-profile CLI flags.
+enable_profiler = false  # Default: false
+
+# Processing control (optional)
+# -----------------------------
+# These settings allow for fine-grained control over how specific files are processed.
+# They are typically used for debugging or handling problematic files.
+
+# force_reprocess: A list of file paths (relative to 'source_code_root_dir') that should be
+# reprocessed even if they haven't changed since the last analysis.
+# Useful if you suspect an issue with a previous analysis of a specific file.
+# This can also be set via the --force-reprocess CLI argument (comma-separated).
+force_reprocess = [
+  "schema_app_core/functions/is_employee_active.sql",
+  "schema_app_finance/packages/payroll_pkg.pkb"
+]
+
+# clear_history_for_file: A list of file paths (relative to 'source_code_root_dir') for which
+# historical processing records (e.g., last processed timestamp, hash) should be cleared
+# before the analysis. This forces a completely fresh processing of these files.
+# Useful if a file's processing history is corrupted or needs a clean slate.
+# This can also be set via the --clear-history-for-file CLI argument (comma-separated).
+clear_history_for_file = [
+  "schema_app_core/procedures/old_unused_procedure.sql"
+]
+
+# Call extractor keywords to drop
+# -------------------------------
+# call_extractor_keywords_to_drop: A list of keywords (typically function or procedure names)
+# that should be ignored by the call extractor during dependency analysis.
+# This is useful for filtering out calls to very common built-in functions, standard library
+# packages (like DBMS_OUTPUT), or other items that are not relevant for the specific
+# dependency graph you want to generate.
+
+call_extractor_keywords_to_drop = [
+  # Common SQL aggregate functions
+  "COUNT", "SUM", "AVG", "MIN", "MAX",
+  
+  # Common SQL string manipulation functions
+  "SUBSTR", "INSTR", "LENGTH", "LOWER", "UPPER", "TRIM", "LTRIM", "RTRIM", "REPLACE",
+  
+  # Common SQL date functions
+  "TO_DATE", "TO_CHAR", "SYSDATE", "ADD_MONTHS", "MONTHS_BETWEEN", "NEXT_DAY", "LAST_DAY",
+  
+  # Common SQL conversion/coalesce functions
+  "TO_NUMBER", "NVL", "NVL2", "COALESCE", "NULLIF", "DECODE",
+  
+  # Common SQL operators that might be detected as function calls
+  "IN", "EXISTS", "BETWEEN", "LIKE",
+  
+  # Oracle built-in package procedures/functions 
+  "DBMS_OUTPUT.PUT_LINE", "DBMS_OUTPUT.PUT", "DBMS_OUTPUT.NEW_LINE",
+  "DBMS_LOCK.SLEEP",
+  "UTL_FILE.FOPEN", "UTL_FILE.PUT_LINE", "UTL_FILE.FCLOSE",
+  
+  # Add your project-specific keywords to ignore here
+  # "MY_COMMON_LOGGING_PROCEDURE",
+  # "INTERNAL_HELPER_FUNCTION"
+]
+
+# Other Settings
+# -------------
+# Add any additional custom settings below this point
+# custom_setting_1 = "value"
+# custom_setting_2 = 123

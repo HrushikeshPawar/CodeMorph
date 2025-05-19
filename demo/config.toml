@@ -1,0 +1,37 @@
+# PL/SQL Analyzer Configuration for Demo
+# This configuration specifically targets the dummy_plsql_source directory
+
+# Core configuration fields
+source_code_root_dir = "demo/dummy_plsql_source"
+output_base_dir = "demo/generated/artifacts"
+
+# Logging and verbosity
+log_verbose_level = 2  # 0=ERROR, 1=INFO, 2=DEBUG, 3=TRACE
+
+# Database settings
+database_filename = "PLSQL_Demo_CodeObjects.db"
+
+# File selection patterns
+file_extensions_to_include = ["sql", "pkb"]
+
+# Directory exclusions
+exclude_names_from_processed_path = ["demo", "dummy_plsql_source"]
+
+# Package naming exclusions - paths to exclude when deriving package names
+exclude_names_for_package_derivation = ["PROCEDURES", "PACKAGES", "FUNCTIONS"]
+
+# Performance settings
+enable_profiler = false
+
+# Processing control - uncomment if needed
+# force_reprocess = [
+#   "schema_app_core/functions/is_employee_active.sql",
+#   "schema_app_finance/packages/payroll_pkg.pkb"
+# ]
+# clear_history_for_file = [
+#   "schema_app_core/procedures/old_unused_procedure.sql"
+# ]
+
+# Keywords to drop during call extraction to reduce noise
+# These are SQL functions, commands, and PL/SQL constructs that should be filtered
+# This is using the default comprehensive list defined in settings.py

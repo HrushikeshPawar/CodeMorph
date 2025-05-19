@@ -1,11 +1,10 @@
-# packages/plsql_analyzer/profiling_scripts/profile_signature_parser.py
 import cProfile
 import pstats
 import io
+from pathlib import Path
 from loguru import logger # Assuming PLSQLSignatureParser expects a loguru logger
 
-# Adjust this import based on your actual project structure
-# This assumes 'packages' is a root for imports or your PYTHONPATH is set up accordingly.
+from plsql_analyzer.settings import AppConfig
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
 
 # Sample signature for profiling - use more and varied samples for real profiling
@@ -19,7 +18,7 @@ SAMPLE_SIGNATURE_COMPLEX = """
 """
 NUM_ITERATIONS = 500 # Number of times to parse for more stable profiling data
 
-def run_parsing_task():
+def run_parsing_task(app_config):
     # Create a minimal logger for the parser.
     # For profiling, you might want to disable or reduce logging verbosity.
     prof_logger = logger.patch(lambda record: record.update(name="profiling_logger"))
@@ -30,14 +29,27 @@ def run_parsing_task():
     for i in range(NUM_ITERATIONS):
         parser.parse(SAMPLE_SIGNATURE_VALID)
         parser.parse(SAMPLE_SIGNATURE_COMPLEX)
+    
+    return app_config.output_base_dir
 
 if __name__ == "__main__":
+    # Create AppConfig instance
+    app_config = AppConfig(
+        source_code_root_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data"),
+        output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
+        log_verbose_level=0,  # Minimal logging for profiling
+        enable_profiler=True
+    )
+    
+    # Make sure artifact directories exist
+    app_config.ensure_artifact_dirs()
+    
     print(f"Profiling PLSQLSignatureParser.parse over {NUM_ITERATIONS*2} total calls...")
 
     profiler = cProfile.Profile()
     profiler.enable()
 
-    run_parsing_task()
+    output_dir = run_parsing_task(app_config)
 
     profiler.disable()
 
@@ -49,9 +61,11 @@ if __name__ == "__main__":
     print("\n--- Profiling Results (Top 20 by Total Time) ---")
     print(s.getvalue())
 
-    # For more detailed analysis, you can dump stats to a file:
-    profiler.dump_stats(r"packages\plsql_analyzer\profiling_scripts\signature_parser.prof")
-    # And then view it with a visualizer like snakeviz.
-    print("\nTo visualize, uncomment dump_stats line and use a tool like snakeviz.")
+    # For more detailed analysis, dump stats to a file using the AppConfig output directory
+    profile_output = output_dir / "signature_parser.prof"
+    profiler.dump_stats(profile_output)
+    
+    print(f"\nProfile data saved to: {profile_output}")
+    print("To visualize, use a tool like snakeviz:")
     print("Install snakeviz with: pip install snakeviz")
-    print("Then run: snakeviz packages\plsql_analyzer\profiling_scripts\signature_parser.prof")
+    print(f"Then run: snakeviz {profile_output}")

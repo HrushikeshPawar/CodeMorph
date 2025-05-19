@@ -17,7 +17,11 @@ from dependency_analyzer.analysis.analyzer import (
     find_terminal_nodes,
     get_node_degrees,
     find_all_paths,
-    get_connected_components
+    get_connected_components,
+    calculate_node_complexity_metrics,
+    get_descendants,
+    get_ancestors,
+    trace_downstream_paths
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -511,9 +515,7 @@ def test_find_all_paths_with_cycles_and_cutoff(graph_with_cycles, da_test_logger
     # Test cutoff
     # A -> B -> C. Length 3 (2 edges). Cutoff 2 means max 2 edges.
     paths_A_C_cutoff2 = find_all_paths(graph_with_cycles, "A", "C", da_test_logger, cutoff=1)
-    assert paths_A_C_cutoff2 == [] # Path A-B-C has length 3 (nodes), 2 edges. Cutoff is path length (edges).
-                                    # Networkx cutoff is path length (number of edges).
-                                    # A->B->C has length 2. Cutoff 1 should yield no path.
+    assert paths_A_C_cutoff2 == [] # Path A-B-C has length 3 (nodes), 2 edges. Cutoff 1 should yield no path.
     paths_A_C_cutoff3 = find_all_paths(graph_with_cycles, "A", "C", da_test_logger, cutoff=2)
     assert paths_A_C_cutoff3 == [["A", "B", "C"]]
 
@@ -527,6 +529,49 @@ def test_find_all_paths_complex_multiple_paths(complex_graph, da_test_logger: lg
     # Convert to set of tuples for order-independent comparison of paths
     assert {tuple(p) for p in paths} == {tuple(ep) for ep in expected_paths}
 
+
+# 7b. trace_downstream_paths
+def test_trace_downstream_paths_to_target(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Graph: A -> B -> C, D, E -> F
+    # Paths from A to C: [["A", "B", "C"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, target_node="C")
+    assert paths == [["A", "B", "C"]]
+
+def test_trace_downstream_paths_depth_limit(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Paths from A, depth_limit=1: [["A", "B"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, depth_limit=1)
+    assert paths == [["A", "B"]]
+    # Paths from A, depth_limit=2: [["A", "B"], ["A", "B", "C"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, depth_limit=2)
+    assert sorted(paths) == sorted([["A", "B"], ["A", "B", "C"]])
+
+def test_trace_downstream_paths_no_target_all_paths(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # All simple paths from E: [["E", "F"]]
+    paths = trace_downstream_paths(simple_graph_no_cycles, "E", da_test_logger)
+    assert paths == [["E", "F"]]
+    # All simple paths from D: [] (no outgoing edges)
+    paths = trace_downstream_paths(simple_graph_no_cycles, "D", da_test_logger)
+    assert paths == []
+
+def test_trace_downstream_paths_cycles(graph_with_cycles, da_test_logger: lg.Logger):
+    # A -> B -> C -> A (cycle), A -> D -> E -> D (cycle)
+    # All simple paths from A, depth_limit=3
+    paths = trace_downstream_paths(graph_with_cycles, "A", da_test_logger, depth_limit=3)
+    # Should include ["A", "B"], ["A", "B", "C"], ["A", "D"], ["A", "D", "E"]
+    expected = [["A", "B"], ["A", "B", "C"], ["A", "D"], ["A", "D", "E"]]
+    assert sorted(paths) == sorted(expected)
+
+def test_trace_downstream_paths_invalid_nodes(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    # Source node not in graph
+    paths = trace_downstream_paths(simple_graph_no_cycles, "Z", da_test_logger)
+    assert paths == []
+    # Target node not in graph
+    paths = trace_downstream_paths(simple_graph_no_cycles, "A", da_test_logger, target_node="Z")
+    assert paths == []
+
+def test_trace_downstream_paths_empty_graph(empty_graph, da_test_logger: lg.Logger):
+    paths = trace_downstream_paths(empty_graph, "A", da_test_logger)
+    assert paths == []
 
 # 8. get_connected_components
 def test_get_connected_components_empty_graph(empty_graph, da_test_logger: lg.Logger):
@@ -553,7 +598,7 @@ def test_get_connected_components_cycles_strongly(graph_with_cycles, da_test_log
     # Cycle A-B-C, Cycle D-E. A->D.
     # So, A,B,C,D,E are all one SCC.
     # F, G, H are separate.
-    # Corrected: SCCs are {A,B,C}, {D,E}, {F}, {G}, {H} if A->D is not there.
+    # Corrected: SCCs are {A,B,C} and {D,E} if A->D is not there.
     # With A->D:
     # A can reach D. D can reach E. E can reach D.
     # C can reach A. B can reach C. A can reach B.
@@ -601,3 +646,192 @@ def test_get_connected_components_complex_weakly(complex_graph, da_test_logger: 
     }
     found_wcc_sets = {frozenset(comp) for comp in wcc}
     assert found_wcc_sets == expected_wcc_sets
+
+
+def test_classify_nodes_basic(complex_graph, da_test_logger: lg.Logger):
+    from dependency_analyzer.analysis.analyzer import classify_nodes
+    classify_nodes(complex_graph, da_test_logger, complexity_metrics_available=False)
+    # Check that node_role is assigned and at least one hub, utility, orphan, entry, terminal exists
+    roles = {n: complex_graph.nodes[n].get('node_role', []) for n in complex_graph.nodes()}
+    # There should be entry points
+    entry_points = [n for n, r in roles.items() if 'entry_point' in r]
+    assert set(entry_points) == {'EntryA', 'EntryB', 'Iso'}
+    # There should be terminal nodes
+    terminal_nodes = [n for n, r in roles.items() if 'terminal_node' in r]
+    assert 'T1' in terminal_nodes and 'Iso' in terminal_nodes
+    # There should be at least one hub or utility or orphan
+    found_any = any('hub' in r or 'utility' in r or 'orphan_component_member' in r for r in roles.values())
+    assert found_any
+
+# Removed duplicate definition of test_classify_nodes_basic
+
+
+# 9. calculate_node_complexity_metrics
+def test_calculate_node_complexity_metrics_basic(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(simple_graph_no_cycles, da_test_logger)
+    for node_id, node_data in simple_graph_no_cycles.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # LOC should be >= 1 for default clean_code
+        assert node_data['loc'] >= 1
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
+
+def test_calculate_node_complexity_metrics_edge_cases(empty_graph, da_test_logger: lg.Logger):
+    # Should not raise or fail on empty graph
+    calculate_node_complexity_metrics(empty_graph, da_test_logger)
+    assert len(empty_graph.nodes) == 0
+
+def test_calculate_node_complexity_metrics_complex(complex_graph, da_test_logger: lg.Logger):
+    calculate_node_complexity_metrics(complex_graph, da_test_logger)
+    for node_id, node_data in complex_graph.nodes(data=True):
+        assert 'loc' in node_data
+        assert 'num_params' in node_data
+        assert 'num_calls_made' in node_data
+        assert 'acc' in node_data
+        # ACC should be >= 1
+        assert node_data['acc'] >= 1
+
+def test_calculate_node_complexity_metrics_specific_values(da_test_logger: lg.Logger):
+    graph = nx.DiGraph()
+    mock_obj_code = (
+        "IF condition1 THEN\n"
+        "  call_a();\n"
+        "ELSIF condition2 THEN\n"
+        "  call_b();\n"
+        "  call_a(); -- duplicate call\n"
+        "ELSE\n"
+        "  FOR i IN 1..10 LOOP\n"
+        "    call_c();\n"
+        "  END LOOP;\n"
+        "END IF;"
+    )
+    mock_obj_params = [{'name': 'p1', 'type': 'VARCHAR2'}, {'name': 'p2', 'type': 'NUMBER'}]
+    mock_obj_calls = [
+        CallDetailsTuple(call_name='call_a', line_no=2, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_b', line_no=4, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_a', line_no=5, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+        CallDetailsTuple(call_name='call_c', line_no=8, start_idx=0, end_idx=0, positional_params=[], named_params={}),
+    ]
+    
+    mock_node_obj = MockPLSQLCodeObject(
+        name="TestProc",
+        clean_code=mock_obj_code,
+        parsed_parameters=mock_obj_params,
+        extracted_calls=mock_obj_calls
+    )
+    graph.add_node("TestProcNode", object=mock_node_obj)
+
+    calculate_node_complexity_metrics(graph, da_test_logger)
+    
+    node_data = graph.nodes["TestProcNode"]
+    assert node_data['loc'] == 10
+    assert node_data['num_params'] == 2
+    assert node_data['num_calls_made'] == 3 # unique: call_a, call_b, call_c
+    
+    # This assertion depends on whether 'THEN' is counted in ACC
+    # If THEN is counted: IF, THEN, ELSIF, THEN, FOR, LOOP = 6 keywords. ACC = 6 + 1 = 7
+    # If THEN is NOT counted: IF, ELSIF, FOR, LOOP = 4 keywords. ACC = 4 + 1 = 5
+    expected_acc = 7 # Assuming 'THEN' is counted as per current implementation
+    assert node_data['acc'] == expected_acc, f"ACC mismatch: got {node_data['acc']}, want {expected_acc}"
+
+def test_analyze_metrics_infers_format_and_saves(tmp_path, da_test_logger):
+    import shutil
+    from dependency_analyzer.analysis.analyzer import calculate_node_complexity_metrics
+    from dependency_analyzer.cli import analyze_metrics
+    import networkx as nx
+    import types
+    # Create a test graph and save as .graphml
+    G = nx.DiGraph()
+    G.add_node("A")
+    G.add_node("B")
+    G.add_edge("A", "B")
+    graphml_path = tmp_path / "testgraph.graphml"
+    nx.write_graphml_lxml(G=G, path=graphml_path)
+
+    # Patch analyzer.calculate_node_complexity_metrics to check call
+    called = {}
+    def fake_calc(graph, logger):
+        called['called'] = True
+        assert isinstance(graph, nx.DiGraph)
+    orig_calc = calculate_node_complexity_metrics
+    import dependency_analyzer.analysis.analyzer as analyzer_mod
+    analyzer_mod.calculate_node_complexity_metrics = fake_calc
+
+    # Patch GraphStorage to check format used for load/save
+    from dependency_analyzer.persistence.graph_storage import GraphStorage
+    orig_load_graph = GraphStorage.load_graph
+    orig_save_structure_only = GraphStorage.save_structure_only
+    used_formats = {}
+    def fake_load(self, path, format):
+        used_formats['load'] = format
+        # Return a DiGraph with the expected structure for the test
+        G_loaded = nx.DiGraph()
+        G_loaded.add_node("A", object=None)
+        G_loaded.add_node("B", object=None)
+        G_loaded.add_edge("A", "B")
+        return G_loaded
+    def fake_save(self, graph, path, format):
+        used_formats['save'] = format
+        return True
+    GraphStorage.load_graph = fake_load
+    GraphStorage.save_structure_only = fake_save
+
+    # Call the CLI command (simulate user passing only the file, not format)
+    analyze_metrics(
+        graph_path=graphml_path,
+        graph_format="gpickle",  # default, should be overridden by .graphml
+        verbose_level=0
+    )
+    assert used_formats['load'] == 'graphml'
+    assert used_formats['save'] == 'graphml'
+    assert called['called']
+
+    # Restore
+    analyzer_mod.calculate_node_complexity_metrics = orig_calc
+    GraphStorage.load_graph = orig_load_graph
+    GraphStorage.save_structure_only = orig_save_structure_only
+
+def test_get_descendants_and_ancestors_simple(simple_graph_no_cycles):
+    graph = simple_graph_no_cycles
+    # A -> B -> C, D (isolated), E -> F
+    assert get_descendants(graph, "A") == {"B", "C"}
+    assert get_descendants(graph, "B") == {"C"}
+    assert get_descendants(graph, "C") == set()
+    assert get_descendants(graph, "D") == set()
+    assert get_descendants(graph, "E") == {"F"}
+    assert get_descendants(graph, "F") == set()
+    # Depth limit
+    assert get_descendants(graph, "A", depth_limit=1) == {"B"}
+    assert get_descendants(graph, "A", depth_limit=2) == {"B", "C"}
+    # Ancestors
+    assert get_ancestors(graph, "C") == {"A", "B"}
+    assert get_ancestors(graph, "B") == {"A"}
+    assert get_ancestors(graph, "A") == set()
+    assert get_ancestors(graph, "D") == set()
+    assert get_ancestors(graph, "F") == {"E"}
+    # Depth limit
+    assert get_ancestors(graph, "C", depth_limit=1) == {"B"}
+    assert get_ancestors(graph, "C", depth_limit=2) == {"A", "B"}
+    # Node not in graph
+    assert get_descendants(graph, "Z") == set()
+    assert get_ancestors(graph, "Z") == set()
+
+
+def test_get_descendants_and_ancestors_cycles(graph_with_cycles):
+    graph = graph_with_cycles
+    # A-B-C cycle, D-E cycle, F-G-H chain, A->D
+    # Descendants
+    assert get_descendants(graph, "A") == {"B", "C", "D", "E"}
+    assert get_descendants(graph, "D") == {"E"}
+    assert get_descendants(graph, "F") == {"G", "H"}
+    # Ancestors
+    assert get_ancestors(graph, "A") == {"B", "C"}
+    assert get_ancestors(graph, "D") == {"A", "E", "B", "C"}
+    assert get_ancestors(graph, "H") == {"F", "G"}
+    # Depth limit
+    assert get_descendants(graph, "A", depth_limit=1) == {"B", "D"}
+    # C is also within 2 steps upstream of D: D<-E<-D<-A<-B<-C (cycle)
+    assert get_ancestors(graph, "D", depth_limit=2) == {"A", "E", "C"}

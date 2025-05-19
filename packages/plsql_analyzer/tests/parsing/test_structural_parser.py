@@ -152,15 +152,6 @@ def test_reset_state(basic_parser: PlSqlStructuralParser):
     assert basic_parser.collected_code_objects == {}
     assert basic_parser.logger is not None # Logger should persist
 
-@pytest.mark.parametrize("text, expected", [
-    ("text with < brackets >", "text with \\< brackets \\>"),
-    ("no brackets", "no brackets"),
-    ("<>", "\\<\\>"),
-    ("", ""),
-])
-def test_escape_angle_brackets(basic_parser: PlSqlStructuralParser, text, expected):
-    assert basic_parser._escape_angle_brackets(text) == expected
-
 @pytest.mark.parametrize("line, initial_quote_state, expected_processed_line, expected_final_quote_state", [
     ("simple line", False, "simple line", False),
     ("line with -- comment", False, "line with ", False),
@@ -208,20 +199,20 @@ def test_push_pop_scope(basic_parser: PlSqlStructuralParser):
     # _check_for_forward_decl_candidate is called inside _push_scope
     # We'd need to mock/verify its call or check parser.forward_decl_candidate if it was set
 
-    popped_proc = basic_parser._pop_scope()
+    popped_proc = basic_parser._pop_scope(reason="test")
     assert popped_proc[1] == ("PROCEDURE", "fwd_proc_test")
     assert len(basic_parser.scope_stack) == 2 # my_proc and my_pkg left
 
-    popped_proc2 = basic_parser._pop_scope()
+    popped_proc2 = basic_parser._pop_scope(reason="test")
     assert popped_proc2[1] == ("PROCEDURE", "my_proc")
     assert len(basic_parser.scope_stack) == 1
 
-    popped_pkg = basic_parser._pop_scope()
+    popped_pkg = basic_parser._pop_scope(reason="test")
     assert popped_pkg[1] == ("PACKAGE", "my_pkg")
     assert len(basic_parser.scope_stack) == 0
 
     with pytest.raises(IndexError):
-        basic_parser._pop_scope()
+        basic_parser._pop_scope(reason="test")
 
 def test_push_pop_block(basic_parser: PlSqlStructuralParser):
     basic_parser._push_block(1, "IF")
@@ -563,43 +554,15 @@ STRUCTURAL_PARSER_TEST_DATA_DIR = TEST_DATA_ROOT / "structural_parser"
 TEST_LOGS_DIR = Path(__file__).parent.parent / "logs" / "structural_parser"
 TEST_LOGS_DIR.mkdir(parents=True, exist_ok=True) # Ensure the log directory exists
 
-
-# List your test file pairs: (sql_file_name, expected_json_file_name)
-PARSE_METHOD_TEST_CASES = [
-    (['WS_OWNER', 'PROCEDURES', 'COB_CLAIM_SUBMISSION.sql'], 'COB_CLAIM_SUBMISSION.json'),
-    (['WS_OWNER', 'PROCEDURES', 'CLAIM_SUBMISSION_SP.sql'], 'CLAIM_SUBMISSION_SP.json'),
-    (['WS_OWNER', 'PACKAGE_BODIES', 'XML_REQUEST_RESPOND_PKG.sql'], 'XML_REQUEST_RESPOND_PKG.json'),
-    (['WS_OWNER', 'PACKAGE_BODIES', 'WS_VALIDATE_PKG.sql'], 'WS_VALIDATE_PKG.json'),
-    (['WS_OWNER', 'PACKAGE_BODIES', 'WS_ERROR_PKG.sql'], 'WS_ERROR_PKG.json'),
-    (['WS_OWNER', 'PACKAGE_BODIES', 'WS_CANCELLED_RXS_PKG.sql'], 'WS_CANCELLED_RXS_PKG.json'),
-    (['WS_OWNER', 'PACKAGE_BODIES', 'WS_COMMONS_PKG.sql'], 'WS_COMMONS_PKG.json'),
-    (['NCPDP_OWNER', 'PACKAGE_BODIES', 'RXH_NCPDP_DUM_TC_UTIL_PKG.sql'], 'RXH_NCPDP_DUM_TC_UTIL_PKG.json'),
-    (['THOT', 'PACKAGE_BODIES', 'WQ_TASKS_PKG.sql'], 'WQ_TASKS_PKG.json'),
-    (['cigna_mig_usr', 'PACKAGE_BODIES', 'PKG_DI_CIGNA_CURL7_REPORT.sql'], 'PKG_DI_CIGNA_CURL7_REPORT.json'),
-    (['cigna_mig_usr', 'PACKAGE_BODIES', 'PK_DI_CIGNA_DATA_LOAD.sql'], 'PK_DI_CIGNA_DATA_LOAD.json'),
-    (['cigna_mig_usr', 'PACKAGE_BODIES', 'PK_DI_CLIENT_X_DATA_LOAD.sql'], 'PK_DI_CLIENT_X_DATA_LOAD.json'),
-    (['cigna_mig_usr', 'PACKAGE_BODIES', 'PK_DI_XL_XPORT.sql'], 'PK_DI_XL_XPORT.json'),
-    (['doc_owner', 'PACKAGE_BODIES', 'CDM_COMMON_PKG.sql'], 'CDM_COMMON_PKG.json'),
-    (['doc_owner', 'PACKAGE_BODIES', 'IMSSERVICESPKG.sql'], 'IMSSERVICESPKG.json'),
-    (['fop_owner', 'PACKAGE_BODIES', 'AUTOFAX_PKG.sql'], 'AUTOFAX_PKG.json'),
-    (['fop_owner', 'PACKAGE_BODIES', 'PRINT_LABEL_PKG.sql'], 'PRINT_LABEL_PKG.json'),
-    (['doc_owner', 'PACKAGE_BODIES', 'CDM_AUTOUPLOAD_PKG.sql'], 'CDM_AUTOUPLOAD_PKG.json'),
-    (['NCPDP_OWNER', 'PACKAGE_BODIES', 'NCPDP_LOGS_PKG.sql'], 'NCPDP_LOGS_PKG.json'),
-    (['NCPDP_OWNER', 'PACKAGE_BODIES', 'RXH_EDI_DUM_NCPDP_D0_PROC_PKG.sql'], 'RXH_EDI_DUM_NCPDP_D0_PROC_PKG.json'),
-    (['NCPDP_OWNER', 'PACKAGE_BODIES', 'RXH_EDI_DUM_NCPDP_UTIL_PKG.sql'], 'RXH_EDI_DUM_NCPDP_UTIL_PKG.json'),
-    (['pac_cad', 'PACKAGE_BODIES', 'PAC_N090_PKG.sql'], 'PAC_N090_PKG.json'),
-    (['RXH_CUSTOM', 'PACKAGE_BODIES', 'RXH_PRESCRIPTIONS_PKG.sql'], 'RXH_PRESCRIPTIONS_PKG.json'),
-    (['RXH_CUSTOM', 'PROCEDURES', 'REFILLREQ_FOR_TRANSFERRED_RX.sql'], 'REFILLREQ_FOR_TRANSFERRED_RX.json'),
-    (['THOT', 'FUNCTIONS', 'SHIPMENT_PROFILE_CHECK.sql'], 'SHIPMENT_PROFILE_CHECK.json'),
-    (['THOT', 'PACKAGE_BODIES', 'AUTO_DIALER.sql'], 'AUTO_DIALER.json'),
-    (['THOT', 'PACKAGE_BODIES', 'BLOB_WRAPPER.sql'], 'BLOB_WRAPPER.json'),
-    (['THOT', 'PACKAGE_BODIES', 'GET_SATISFACTION_SURVEYS.sql'], 'GET_SATISFACTION_SURVEYS.json'),
-    (['THOT', 'FUNCTIONS', 'VLI_FN.sql'], 'VLI_FN.json'),
-    (['THOT', 'PACKAGE_BODIES', 'IT_FREEDOM_CLAIM_FILE_PKG.sql'], 'IT_FREEDOM_CLAIM_FILE_PKG.json'),
-    
-]
+TEST_INFO_FPATH = TEST_DATA_ROOT / "parse_method_test_cases.json"
+if TEST_INFO_FPATH.is_file():
+    with open(TEST_INFO_FPATH, 'r') as f:
+        PARSE_METHOD_TEST_CASES = json.load(f)
+else:
+    PARSE_METHOD_TEST_CASES = []
 @pytest.mark.parametrize("sql_file_path, expected_json_file_name", PARSE_METHOD_TEST_CASES)
 def test_parse_method_with_real_files(test_logger:lg.Logger, sql_file_path, expected_json_file_name):
+
     sql_file_name = sql_file_path[-1]
     sql_file_path = Path(STRUCTURAL_PARSER_TEST_DATA_DIR, "input", *sql_file_path)
     expected_json_path = Path(STRUCTURAL_PARSER_TEST_DATA_DIR, "output", expected_json_file_name)
