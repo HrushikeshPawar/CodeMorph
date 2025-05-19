@@ -122,10 +122,6 @@ class AppConfig(BaseModel):
         self.exclude_names_for_package_derivation = list(set(self.exclude_names_for_package_derivation))
         # Remove duplicates from `exclude_names_from_processed_path`
         self.exclude_names_from_processed_path = list(set(self.exclude_names_from_processed_path))
-
-        print(f"Exclusion names for package derivation: {self.exclude_names_for_package_derivation}")
-        print(f"Exclusion names from processed path: {self.exclude_names_from_processed_path}")
-        
         
 
 #  Keywords to drop during call extraction to reduce noise from common PL/SQL constructs
