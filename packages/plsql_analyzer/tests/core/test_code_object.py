@@ -31,14 +31,20 @@ class TestPLSQLCodeObject:
         assert obj.extracted_calls == []
         assert obj.id is None # ID not generated until generate_id() or to_dict()
 
-    @pytest.mark.xfail(reason="Moved from `ExtractedCallTuple` to `CallDetailsTuple`")
     def test_instantiation_with_values(self):
         params = [{"name": "p_id", "type": "NUMBER", "mode": "IN"}]
-        calls = [ExtractedCallTuple("other_proc", 10, 100, 110)]
+        calls = [CallDetailsTuple(
+            call_name="other_proc", 
+            line_no=10, 
+            start_idx=100, 
+            end_idx=110,
+            positional_params=[],
+            named_params={}
+        )]
         obj = PLSQL_CodeObject(
             name="Func1",
             package_name="PKG.SubPack",
-            source="FUNCTION Func1 RETURN BOOLEAN IS BEGIN END;",
+            clean_code="FUNCTION Func1 RETURN BOOLEAN IS BEGIN END;",
             type=CodeObjectType.FUNCTION,
             overloaded=True,
             parsed_parameters=params,
@@ -49,7 +55,7 @@ class TestPLSQLCodeObject:
         )
         assert obj.name == "func1" # names are casefolded
         assert obj.package_name == "pkg.subpack" # casefolded
-        assert obj.source is not None
+        assert obj.clean_code is not None
         assert obj.type == CodeObjectType.FUNCTION
         assert obj.overloaded
         assert obj.parsed_parameters == params
@@ -131,10 +137,9 @@ class TestPLSQLCodeObject:
         obj.generate_id()
         assert obj.id == "pkg.not_over"
 
-    @pytest.mark.xfail(reason="Moved from `ExtractedCallTuple` to `CallDetailsTuple`")
     def test_to_dict_serialization(self):
         params = [{"name": "p_id", "type": "NUMBER", "mode": "IN", "default_value": "1"}]
-        calls = [ExtractedCallTuple("another_proc", 10, 100, 110)]
+        calls = [CallDetailsTuple("another_proc", 10, 100, 110, [], {})]
         obj = PLSQL_CodeObject(
             name="MyFunc",
             package_name="TestPkg",
@@ -152,9 +157,9 @@ class TestPLSQLCodeObject:
         assert obj_dict["package_name"] == "testpkg"
         assert obj_dict["type"] == "FUNCTION"
         assert obj_dict["overloaded"] is True
-        assert obj_dict["parameters"] == params
-        assert obj_dict["return_type"] == "VARCHAR2"
-        assert obj_dict["extracted_calls"] == [{"call_name": "another_proc", "line_no": 10, "start_idx": 100, "end_idx": 110}]
+        assert obj_dict["parsed_parameters"] == params
+        assert obj_dict["parsed_return_type"] == "VARCHAR2"
+        assert obj_dict["extracted_calls"] == [{"call_name": "another_proc", "line_no": 10, "start_idx": 100, "end_idx": 110, "positional_params": [], "named_params": {}}]
         assert obj_dict["source_code_lines"] == {"start": 1, "end": 20}
 
 

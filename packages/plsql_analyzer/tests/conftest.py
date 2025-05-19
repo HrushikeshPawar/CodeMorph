@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 import loguru
 import sys
-from pathlib import Path
+
+from plsql_analyzer.settings import AppConfig
 
 @pytest.fixture(scope="session")
 def test_logger() -> loguru.Logger:
@@ -37,20 +38,26 @@ def temp_db_path(tmp_path):
     return tmp_path / "test_plsql_analysis.db"
 
 @pytest.fixture
-def sample_config_dict():
-    """Provides a sample configuration dictionary for tests."""
-    # Mock parts of the config that might be used by components directly or indirectly
-    # In a real scenario, you might load a test-specific config or mock config module access
-    class MockConfig:
-        LOG_VERBOSE_LEVEL = 3 # TRACE for tests
-        LOGS_DIR = Path("temp_test_logs") # Temporary log dir
-        DATABASE_PATH = Path("temp_test_db.db")
-        EXCLUDE_FROM_PROCESSED_PATH = ["/mnt/some_base"]
-        EXCLUDE_FROM_PATH_FOR_PACKAGE_DERIVATION = ["src", "sources", "db_objects"]
-        FILE_EXTENSION = "sql"
-        CALL_EXTRACTOR_KEYWORDS_TO_DROP = ["IF", "LOOP", "BEGIN"]
-        SOURCE_CODE_ROOT_DIR = Path("/mock/source/root")
-
-    # Ensure mock logs dir exists for tests that might try to write there via logger setup
-    MockConfig.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    return MockConfig()
+def sample_app_config(tmp_path):
+    """Provides an AppConfig instance with test values."""
+    test_source_dir = tmp_path / "source"
+    test_output_dir = tmp_path / "output"
+    
+    # Create directories
+    test_source_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a config instance with test values
+    config = AppConfig(
+        source_code_root_dir=test_source_dir,
+        output_base_dir=test_output_dir,
+        log_verbose_level=3,  # TRACE for tests
+        file_extensions_to_include=["sql"],
+        exclude_names_from_processed_path=["/mnt/some_base"],
+        exclude_names_for_package_derivation=["src", "sources", "db_objects"],
+        call_extractor_keywords_to_drop=["IF", "LOOP", "BEGIN", "SELECT"]
+    )
+    
+    # Create necessary directories
+    config.ensure_artifact_dirs()
+    
+    return config
