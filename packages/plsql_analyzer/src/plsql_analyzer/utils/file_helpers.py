@@ -149,6 +149,9 @@ class FileHelpers:
             for part in initial_parts_stripped:
                 # Since these are the first parts, they are unique by definition so far.
                 seen_components.append(part.casefold()) # Store casefolded for uniqueness check
+            
+            seen_components = reversed(seen_components) # Reverse to maintain order for joining
+            self.logger.trace(f"Initial package name from code '{package_name_from_code}' processed into seen components: {seen_components}")
         
         self.logger.trace(f"After processing package_name_from_code: {seen_components}")
 
