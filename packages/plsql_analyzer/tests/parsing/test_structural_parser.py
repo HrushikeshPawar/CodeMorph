@@ -199,20 +199,20 @@ def test_push_pop_scope(basic_parser: PlSqlStructuralParser):
     # _check_for_forward_decl_candidate is called inside _push_scope
     # We'd need to mock/verify its call or check parser.forward_decl_candidate if it was set
 
-    popped_proc = basic_parser._pop_scope()
+    popped_proc = basic_parser._pop_scope(reason="test")
     assert popped_proc[1] == ("PROCEDURE", "fwd_proc_test")
     assert len(basic_parser.scope_stack) == 2 # my_proc and my_pkg left
 
-    popped_proc2 = basic_parser._pop_scope()
+    popped_proc2 = basic_parser._pop_scope(reason="test")
     assert popped_proc2[1] == ("PROCEDURE", "my_proc")
     assert len(basic_parser.scope_stack) == 1
 
-    popped_pkg = basic_parser._pop_scope()
+    popped_pkg = basic_parser._pop_scope(reason="test")
     assert popped_pkg[1] == ("PACKAGE", "my_pkg")
     assert len(basic_parser.scope_stack) == 0
 
     with pytest.raises(IndexError):
-        basic_parser._pop_scope()
+        basic_parser._pop_scope(reason="test")
 
 def test_push_pop_block(basic_parser: PlSqlStructuralParser):
     basic_parser._push_block(1, "IF")

@@ -62,6 +62,8 @@ class TestFileHelpers:
     # Tests for derive_package_name_from_path
     @pytest.mark.parametrize("pkg_from_code, fpath_str, file_ext, exclude_from_pkg_derivation, expected_pkg_name", [
         (None, "project/src/moduleA/sub_mod_b/file.sql", ["sql"], ["project", "src"], "modulea.sub_mod_b.file"),
+        ("modulea.sub_mod_b", "project/src/moduleA/sub_mod_b/file.sql", ["sql"], ["project", "src"], "modulea.sub_mod_b.file"),
+        ("A.B", "project/src/moduleA/sub_mod_b/file.sql", ["sql"], ["project", "src"], "a.b.modulea.sub_mod_b.file"), # Such a case won't happen in real life, but let's test it
         ("core_pkg", "project/src/core_pkg/file.sql", ["sql"], ["project", "src"], "core_pkg.file"),
         (None, "project/src/file.sql", ["sql"], ["project", "src"], "file"), # No path parts left
         ("mypkg", "file.sql", ["sql"], [], "mypkg.file"), # No path parts, only code

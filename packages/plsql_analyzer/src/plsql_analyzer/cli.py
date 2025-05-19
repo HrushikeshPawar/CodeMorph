@@ -40,12 +40,6 @@ def validate_path(_, path: Optional[Path]):
     if not path.exists():
         raise cyclopts.ValidationError(msg=f"Given Path `{path}` does not exist.\n")
 
-def fext_parser(_, fext: Sequence[Token]) -> List[str]:
-    """
-    Convert a list of file extensions to a list of strings.
-    """
-    return [ext.value.split(".")[1] if '.' in ext.value else ext.value for ext in fext]
-
 @app.command
 def parse(
     source_dir: Annotated[Optional[Path], Parameter(help="Root directory of the source code.", converter=convert_to_path, validator=validate_path)],
@@ -53,7 +47,7 @@ def parse(
     output_dir: Annotated[Optional[Path], Parameter(help="Base directory for all generated artifacts.", converter=convert_to_path)] = None,
     verbose: Annotated[int, Parameter(help="Verbosity level (0=ERROR, 1=INFO, 2=DEBUG, 3=TRACE).", name=["--verbose", "-v"], validator=validators.Number(gte=0, lte=3))] = 1,
     profile: Annotated[Optional[bool], Parameter(help="Enable profiling.", name=["--profile"])] = None,
-    include_patterns: Annotated[Optional[List[str]], Parameter(help="File extensions to include in analysis.", name=["--fext", "-e"], consume_multiple=True, converter=fext_parser)] = None,
+    include_patterns: Annotated[Optional[List[str]], Parameter(help="File extensions to include in analysis.", name=["--fext", "-e"], consume_multiple=True)] = None,
     exclude_dirs: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from analysis.", name=["--exd"], consume_multiple=True)] = None,
     exclude_names: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from package naming process.", name=["--exn"], consume_multiple=True)] = None,
     database_filename: Annotated[Optional[str], Parameter(help="Name of the SQLite database file.", name=["--db-filename", "--dbf"])] = None,
@@ -89,7 +83,7 @@ def parse(
 
     # Merge configurations: start with TOML, then override with CLI args
     merged_config_data = {**config_data, **cli_args_provided}
-
+    logger = None
     try:
         app_config = AppConfig(**merged_config_data)
 
@@ -106,8 +100,12 @@ def parse(
         run_plsql_analyzer(app_config, logger)
 
     except Exception as e:
-        logger.error("Error initializing AppConfig or running analysis")
-        logger.exception(e)
+        if logger:
+            logger.critical("Error initializing AppConfig or running analysis.")
+            logger.exception(e)
+        else:
+            print("Error initializing AppConfig or running analysis.")
+            print(e)
         return
 
 

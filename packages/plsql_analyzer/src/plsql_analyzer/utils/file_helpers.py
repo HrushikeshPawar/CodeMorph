@@ -149,23 +149,32 @@ class FileHelpers:
             for part in initial_parts_stripped:
                 # Since these are the first parts, they are unique by definition so far.
                 seen_components.append(part.casefold()) # Store casefolded for uniqueness check
+            
+            seen_components = reversed(seen_components) # Reverse to maintain order for joining
+            self.logger.trace(f"Initial package name from code '{package_name_from_code}' processed into seen components: {seen_components}")
         
         self.logger.trace(f"After processing package_name_from_code: {seen_components}")
 
         # 3. Prepend path-derived components if they are not already present (case-insensitively)
         #    Iterate in reverse to prepend correctly (e.g., 'folder', 'subfolder' -> 'folder.subfolder')
-        for path_component_orig_case in derived_path_components_original_case:
+        package_components = []
+        for path_component_orig_case in reversed(derived_path_components_original_case):
             path_component_casefolded = path_component_orig_case.casefold()
             
-            if path_component_casefolded not in seen_components:
+            if path_component_casefolded not in package_components:
                 # Prepend the component for joining
-                seen_components.append(path_component_casefolded)
+                package_components.append(path_component_casefolded)
                 self.logger.trace(f"Prepended path component '{path_component_orig_case}'. Current ordered parts: {seen_components}")
             else:
                 self.logger.trace(f"Path component '{path_component_orig_case}' (casefolded '{path_component_casefolded}') already effectively present, skipping.")
         
+        for comp in seen_components:
+            if comp not in package_components:
+                package_components.append(comp)
+                self.logger.trace(f"Added component '{comp}' to seen components.")
+        
         # 4. Join to form the final package name string and then casefold it for consistent output.
-        intermediate_package_name_str = ".".join(seen_components)
+        intermediate_package_name_str = ".".join(reversed(package_components))
         final_package_name_casefolded = intermediate_package_name_str.casefold()
 
         self.logger.debug(f"Derived final package name for '{fpath}' as: '{final_package_name_casefolded}' (from intermediate form: '{intermediate_package_name_str}')")

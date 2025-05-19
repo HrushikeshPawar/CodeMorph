@@ -93,6 +93,36 @@ class AppConfig(BaseModel):
         expanded_path_str = os.path.expandvars(expanded_path_str)
         
         return Path(expanded_path_str).resolve()
+    
+    @field_validator('file_extensions_to_include', mode='before')
+    @classmethod
+    def fext_parser(cls, v:Any) -> List[str]:
+        """
+        Convert a list of file extensions to a list of strings.
+        """
+        if not isinstance(v, list):
+            raise ValueError("file_extensions_to_include must be a list.")
+        if not all(isinstance(ext, str) for ext in v):
+            raise ValueError("All file extensions must be strings.")
+
+        return [ext.split(".")[1] if '.' in ext else ext for ext in v]
+
+
+    def model_post_init(self, context):
+
+        # Get current working directory and append it to the `exclude_names_from_processed_path` list
+        current_working_directory = Path.cwd().resolve().parts
+        self.exclude_names_from_processed_path.extend(current_working_directory)
+        
+        # Add `exclude_names_from_processed_path` to `exclude_names_for_package_derivation`
+        # to ensure that these directories are excluded from package name derivation.
+        self.exclude_names_for_package_derivation.extend(self.exclude_names_from_processed_path)
+        
+        # Remove duplicates from `exclude_names_for_package_derivation`
+        self.exclude_names_for_package_derivation = list(set(self.exclude_names_for_package_derivation))
+        # Remove duplicates from `exclude_names_from_processed_path`
+        self.exclude_names_from_processed_path = list(set(self.exclude_names_from_processed_path))
+        
 
 #  Keywords to drop during call extraction to reduce noise from common PL/SQL constructs
 # These are case-insensitive.
