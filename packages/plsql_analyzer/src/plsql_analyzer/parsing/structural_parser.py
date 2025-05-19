@@ -176,9 +176,6 @@ class PlSqlStructuralParser:
         self.is_forward_decl = False
         self.logger.trace("StructuralParser state reset.")
 
-    # _escape_angle_brackets method has been removed and replaced with
-    # the centralized version from utils.text_utils
-
     def _remove_strings_and_inline_comments(self, line: str, current_inside_quote_state: bool) -> Tuple[str, bool]:
         new_line = ""
         idx = 0
@@ -259,16 +256,16 @@ class PlSqlStructuralParser:
         self.block_stack.append((line_num, block_type.upper()))
         self.logger.debug(f"L{line_num}: PUSH BLOCK: {block_type.upper()}")
 
-    def _pop_scope(self) -> Tuple[int, Tuple[str, str], Dict[str, Any]]:
+    def _pop_scope(self, reason:str) -> Tuple[int, Tuple[str, str], Dict[str, Any]]:
         """Pops the current scope from the stack."""
         if not self.scope_stack:
-            self.logger.error(f"L{self.line_num}: Attempted to pop scope, but scope stack is empty!")
+            self.logger.error(f"L{self.line_num}: Attempted to pop scope, but scope stack is empty! (pop reason: {reason})")
             
             # Decide how to handle this - raise error or return dummy? Raising is safer.
             raise IndexError("Attempted to pop from empty scope stack")
     
         popped = self.scope_stack.pop()
-        self.logger.debug(f"L{self.line_num}: POP SCOPE : {popped[1]} (Started L{popped[0]})")
+        self.logger.debug(f"L{self.line_num}: POP SCOPE : {popped[1]} (Started L{popped[0]}) (pop reason: {reason})")
         
         # Clear forward decl candidate if we are popping its scope
         if self.forward_decl_candidate and self.forward_decl_candidate[0] == popped[0]:
@@ -345,7 +342,7 @@ class PlSqlStructuralParser:
         # Find and remove from scope stack (should be the last one)
         found_on_stack = False
         if self.scope_stack and self.scope_stack[-1][0] == scope_line and self.scope_stack[-1][1] == (scope_type, scope_name):
-            self._pop_scope() # Pop it using the method to ensure logging consistency
+            self._pop_scope(reason="Forward Declaration confirmed") # Pop it using the method to ensure logging consistency
             found_on_stack = True
             self.logger.trace(f"Removed forward decl {scope_name} from scope stack.")
 
@@ -373,7 +370,6 @@ class PlSqlStructuralParser:
         self.forward_decl_candidate = None
         self.forward_decl_check_end_line = None
 
-    # @logger.catch(onerror=lambda _: sys.exit(1))
     def _process_line(self):
         """Processes a single line of code. Uses self.logger for output."""
         line = self.current_line_content
@@ -488,25 +484,25 @@ class PlSqlStructuralParser:
             self._clear_forward_decl_candidate(reason=f"New object '{obj_name}' found")
             self._push_scope(self.line_num, obj_type, obj_name)
 
-            if has_end and self.scope_stack:
-                start_idx, (ended_type, ended_name), scope_state = self._pop_scope()
-                
-                # Update end line in collected objects
-                if not scope_state.get("is_package"): # Don't track end for package itself? Or do? Decide.
-                    obj_key = ended_name.casefold()
-                    if obj_key in self.collected_code_objects:
+            # if has_end and self.scope_stack:
+            #     start_idx, (ended_type, ended_name), scope_state = self._pop_scope(reason="END for codeobject found on same line")
 
-                        # Find the corresponding entry (usually the last one for this key) and update end line
-                        for entry in reversed(self.collected_code_objects[obj_key]):
+            #     # Update end line in collected objects
+            #     if not scope_state.get("is_package"): # Don't track end for package itself? Or do? Decide.
+            #         obj_key = ended_name.casefold()
+            #         if obj_key in self.collected_code_objects:
 
-                            # Match on start line to be certain, although usually last is correct
-                            if entry['start'] == start_idx and entry['end'] == -1:
-                                entry['end'] = self.line_num
-                                self.logger.trace(f"Updated end line for {ended_name} to {self.line_num}")
-                                break
+            #             # Find the corresponding entry (usually the last one for this key) and update end line
+            #             for entry in reversed(self.collected_code_objects[obj_key]):
 
-                log_level = "INFO" if ended_type in ["PACKAGE", "PROCEDURE", "FUNCTION"] else "DEBUG"
-                self.logger.log(log_level, f"L{start_idx}-{self.line_num}: END {ended_type} {ended_name}")
+            #                 # Match on start line to be certain, although usually last is correct
+            #                 if entry['start'] == start_idx and entry['end'] == -1:
+            #                     entry['end'] = self.line_num
+            #                     self.logger.trace(f"Updated end line for {ended_name} to {self.line_num}")
+            #                     break
+
+            #     log_level = "INFO" if ended_type in ["PACKAGE", "PROCEDURE", "FUNCTION"] else "DEBUG"
+            #     self.logger.log(log_level, f"L{start_idx}-{self.line_num}: END {ended_type} {ended_name}")
 
             # Don't return yet, need to check for block keywords on the same line
             # Continue processing line for keywords like IS/AS/BEGIN
@@ -526,8 +522,7 @@ class PlSqlStructuralParser:
         # Needs to be checked before individual keywords like BEGIN/END
         one_line_match = KEYWORDS_REQUIRING_END_ONE_LINE_REGEX.search(processed_line)
         if one_line_match:
-            # _ = one_line_match.group(1).upper()
-            
+
             # Count keywords vs ENDs on the line
             keywords = [keyword.casefold() for keyword in KEYWORDS_REQUIRING_END_REGEX.findall(processed_line)]
             ends = END_CHECK_REGEX.findall(processed_line)
@@ -551,7 +546,7 @@ class PlSqlStructuralParser:
                         self._clear_forward_decl_candidate(reason="BEGIN found")
 
                         if self.scope_stack:
-                            start_idx, (ended_type, ended_name), scope_state = self._pop_scope()
+                            start_idx, (ended_type, ended_name), scope_state = self._pop_scope(reason="END for keyword found on same line")
                             
                             # Update end line in collected objects
                             if not scope_state.get("is_package"): # Don't track end for package itself? Or do? Decide.
@@ -654,12 +649,16 @@ class PlSqlStructuralParser:
                 
                 # If no blocks, close the current scope (PROC, FUNC, PACKAGE)
                 elif self.scope_stack:
-                    start_idx, (ended_type, ended_name), scope_state = self._pop_scope()
+                    start_idx, (ended_type, ended_name), scope_state = self._pop_scope(reason="END found")
                     
                     # Update end line in collected objects
                     if not scope_state.get("is_package"): # Don't track end for package itself? Or do? Decide.
                         obj_key = ended_name.casefold()
                         if obj_key in self.collected_code_objects:
+
+                            # Check if the object has begun
+                            if not scope_state.get("has_seen_begin"):
+                                self.logger.error(f"L{self.line_num}: Found END for {ended_type} {ended_name} but it hasn't seen a BEGIN yet!")
 
                             # Find the corresponding entry (usually the last one for this key) and update end line
                             for entry in reversed(self.collected_code_objects[obj_key]):

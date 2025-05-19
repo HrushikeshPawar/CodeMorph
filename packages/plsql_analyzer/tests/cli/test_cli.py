@@ -166,7 +166,7 @@ def test_cli_exclude_dirs_and_names(capsys, dummy_source_dir, mocker):
     
     cli_app(cmd)
     config = mock_run.call_args[0][0]
-    assert sorted(config.exclude_names_from_processed_path) == sorted(exclude_dirs)
+    assert sorted(config.exclude_names_from_processed_path) == sorted(exclude_dirs + list(Path.cwd().resolve().parts))
 
     # Test exclude_names (--exn)
     exclude_names = ["PROCEDURES", "FUNCTIONS"]
@@ -176,7 +176,7 @@ def test_cli_exclude_dirs_and_names(capsys, dummy_source_dir, mocker):
     
     cli_app(cmd)
     config = mock_run.call_args[0][0]
-    assert sorted(config.exclude_names_for_package_derivation) == sorted(exclude_names)
+    assert sorted(config.exclude_names_for_package_derivation) == sorted(exclude_names + list(Path.cwd().resolve().parts))
 
 def test_cli_verbosity_validation(capsys, dummy_source_dir, mocker):
     mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')

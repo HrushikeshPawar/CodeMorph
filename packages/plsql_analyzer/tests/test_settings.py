@@ -9,8 +9,8 @@ def test_default_instantiation():
     assert config.log_verbose_level == 1
     assert config.database_filename == "PLSQL_CodeObjects.db"
     assert config.file_extensions_to_include == ["sql"]
-    assert config.exclude_names_from_processed_path == []
-    assert config.exclude_names_for_package_derivation == ["PROCEDURES", "PACKAGE_BODIES", "FUNCTIONS"]
+    assert sorted(config.exclude_names_from_processed_path) == sorted(list(Path.cwd().resolve().parts))
+    assert sorted(config.exclude_names_for_package_derivation) == sorted(["PROCEDURES", "PACKAGE_BODIES", "FUNCTIONS"] + list(Path.cwd().resolve().parts))
     assert config.enable_profiler is False
 
 def test_override_values():
@@ -27,9 +27,9 @@ def test_override_values():
     assert config.output_base_dir == Path("out").resolve()
     assert config.log_verbose_level == 2
     assert config.database_filename == "test.db"
-    assert config.file_extensions_to_include == ["*.foo"]
-    assert config.exclude_names_from_processed_path == ["bar"]
-    assert config.exclude_names_for_package_derivation == ["PROCEDURES", "PACKAGE_BODIES", "FUNCTIONS"]
+    assert config.file_extensions_to_include == ["foo"]
+    assert sorted(config.exclude_names_from_processed_path) == sorted(["bar"] + list(Path.cwd().resolve().parts))
+    assert sorted(config.exclude_names_for_package_derivation) == sorted(["PROCEDURES", "PACKAGE_BODIES", "FUNCTIONS"] + ["bar"] + list(Path.cwd().resolve().parts))
     assert config.enable_profiler is True
 
 def test_derived_properties():
