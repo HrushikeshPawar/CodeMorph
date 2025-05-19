@@ -1,5 +1,4 @@
 # PL/SQL Analyzer (`plsql-analyzer`)
-# PL/SQL Analyzer (`plsql-analyzer`)
 
 ## Overview
 
@@ -15,7 +14,7 @@ This package is a core component of the CodeMorph project, aimed at facilitating
 *   **Code Cleaning**: Preprocesses PL/SQL code by removing comments and replacing string literals with placeholders to simplify parsing.
 *   **Persistent Storage**: Stores extracted metadata and file processing status in a SQLite database using `DatabaseManager`.
 *   **Change Detection**: Processes only new or modified files based on their content hash.
-*   **Configurable**: Behavior can be customized through `config.py` (e.g., source directories, file extensions, keywords to ignore).
+*   **Configurable**: Behavior can be customized through a TOML configuration file or CLI arguments.
 *   **Logging**: Comprehensive logging using `loguru` for diagnostics and tracing.
 *   **Profiling Scripts**: Includes scripts to profile the performance of key parsing components.
 *   **Unit Tested**: Comes with a suite of unit tests using `pytest`.
@@ -79,47 +78,75 @@ The package is managed using a `pyproject.toml` file.
     pip install .[dev]
     ```
 
-## Configuration
-
-The primary configuration for the `plsql-analyzer` is managed in [`src/plsql_analyzer/config.py`](src/plsql_analyzer/config.py). Key settings include:
-
-*   `BASE_DIR`: Base directory for generated artifacts.
-*   `ARTIFACTS_DIR`: Directory for storing artifacts like logs and the database.
-*   `LOGS_DIR`: Specific directory for log files.
-*   `DATABASE_PATH`: Path to the SQLite database file.
-*   `SOURCE_CODE_ROOT_DIR`: Path to the root directory of your PL/SQL source code. **This needs to be configured by the user.**
-*   `FILE_EXTENSION`: The file extension(s) to scan for PL/SQL files (e.g., "sql", "pks", "pkb").
-*   `LOG_VERBOSE_LEVEL`: Controls console logging verbosity (0=WARNING, 1=INFO, 2=DEBUG, 3=TRACE).
-*   `EXCLUDE_FROM_PROCESSED_PATH`: List of path segments to exclude when forming processed file paths for database records.
-*   `EXCLUDE_FROM_PATH_FOR_PACKAGE_DERIVATION`: List of path segments to exclude when deriving package names from file paths.
-*   `CALL_EXTRACTOR_KEYWORDS_TO_DROP`: A list of PL/SQL keywords to ignore during call extraction to reduce noise.
-*   `REMOVE_FPATH`: A list of specific file paths to remove/ignore from processing.
-
-Modify [`src/plsql_analyzer/config.py`](src/plsql_analyzer/config.py) to suit your environment and PL/SQL codebase.
-
 ## Usage
 
-The `plsql-analyzer` can be run as a script, which will initiate the extraction workflow:
+The primary way to use the PL/SQL Analyzer is through its command-line interface (CLI):
 
 ```bash
-python -m plsql_analyzer
-```
-Alternatively, if the package is installed and the script `plsql-analyzer` is in your PATH (as defined in pyproject.toml):
-```bash
-plsql-analyzer
+plsql-analyzer analyze [OPTIONS]
 ```
 
-The main workflow will:
-1.  Configure logging.
-2.  Initialize the database and ensure the schema is set up.
-3.  Scan the `SOURCE_CODE_ROOT_DIR` for PL/SQL files.
-4.  For each new or modified file (based on hash comparison):
-    *   Clean the code (remove comments, replace literals).
-    *   Perform structural parsing to identify code objects.
-    *   Perform signature parsing for procedures and functions.
-    *   Extract calls made by each object.
-    *   Store the extracted `PLSQL_CodeObject` instances in the database.
-5.  Log a summary of the extraction process.
+### CLI Options
+
+The following options are available for the `analyze` command:
+
+*   `--source-dir DIRECTORY`: Specifies the root directory containing the PL/SQL source code to be analyzed.
+    *   Example: `plsql-analyzer analyze --source-dir ./my_plsql_project/src`
+*   `--output-dir DIRECTORY`: Specifies the base directory where analysis artifacts (database, logs, etc.) will be stored.
+    *   Example: `plsql-analyzer analyze --output-dir ./analysis_results`
+*   `--config-file FILE`: Specifies the path to a custom configuration TOML file. If not provided falls back to default values or other cli options given.
+    *   Example: `plsql-analyzer analyze --config-file ./custom_config.toml`
+*   `-v, --verbose INTEGER`: Sets the verbosity level for logging.
+    *   `0`: ERROR
+    *   `1`: INFO (default)
+    *   `2`: DEBUG
+    *   `3`: TRACE
+    *   Example: `plsql-analyzer analyze -v 2`
+*   `--profile / --no-profile`: Enables or disables performance profiling of the analyzer. Defaults to `no-profile`.
+    *   Example: `plsql-analyzer analyze --profile`
+*   `--force-reprocess TEXT`: A comma-separated list of file paths (relative to `source-dir`) that should be reprocessed even if they haven't changed since the last analysis.
+    *   Example: `plsql-analyzer analyze --force-reprocess "schema1/package1.pkb,schema2/procedure1.sql"`
+*   `--clear-history-for-file TEXT`: A comma-separated list of file paths (relative to `source-dir`) for which historical processing records should be cleared before analysis. This is useful if a file's history is corrupted or needs a fresh start.
+    *   Example: `plsql-analyzer analyze --clear-history-for-file "schema1/old_package.pks"`
+
+## Configuration
+
+### Configuration File (`plsql_analyzer_config.toml`)
+
+The PL/SQL Analyzer can be configured using a TOML file, typically named `plsql_analyzer_config.toml`.
+
+*   **Purpose**: The TOML configuration file allows you to set various parameters for the analysis process, providing more granular control than CLI arguments alone.
+*   **Location**: You can specify a different location using the `--config-file` CLI option.
+*   **Interaction with CLI Arguments**: CLI arguments generally override the corresponding settings in the configuration file. For example, if `source_code_root_dir` is set in the TOML file and `--source-dir` is also provided on the command line, the CLI value will be used.
+
+### Key Configuration Parameters
+
+Here are some of the key parameters you can set in `plsql_analyzer_config.toml`:
+
+*   `source_code_root_dir` (string): The root directory of your PL/SQL source code.
+    *   Example: `source_code_root_dir = "project/sql_sources"`
+*   `output_base_dir` (string): The directory where output artifacts (like the analysis database and logs) will be saved.
+    *   Example: `output_base_dir = "analysis_output"`
+*   `file_extensions_to_include` (array of strings): A list of file extensions to be considered as PL/SQL files.
+    *   Example: `file_extensions_to_include = ["sql", "pks", "pkb", "fnc", "prc"]`
+*   `log_verbose_level` (integer): Sets the logging verbosity (0=ERROR, 1=INFO, 2=DEBUG, 3=TRACE).
+    *   Example: `log_verbose_level = 1`
+*   `database_filename` (string): The name of the SQLite database file where analysis results will be stored.
+    *   Example: `database_filename = "plsql_analysis.db"`
+*   `exclude_names_from_processed_path` (array of strings): A list of directory or file name patterns to exclude from processing. This helps in ignoring irrelevant files or temporary directories.
+    *   Example: `exclude_names_from_processed_path = [".svn", "temp_files"]`
+*   `exclude_names_for_package_derivation` (array of strings): A list of directory names to exclude when trying to derive a package name from a file's path. For instance, if your files are in `packages/my_pkg/file.sql`, and `packages` is in this list, `my_pkg` might be considered part of the package name.
+    *   Example: `exclude_names_for_package_derivation = ["PACKAGE_BODIES", "PROCEDURES"]`
+*   `enable_profiler` (boolean): Set to `true` to enable performance profiling of the analyzer.
+    *   Example: `enable_profiler = false`
+*   `call_extractor_keywords_to_drop` (array of strings): A list of keywords that should be ignored by the call extractor. This is useful for filtering out common SQL functions or keywords that are not relevant for dependency analysis.
+    *   Example: `call_extractor_keywords_to_drop = ["COUNT", "SUM", "DBMS_OUTPUT.PUT_LINE"]`
+*   `force_reprocess` (array of strings, optional): A list of file paths (relative to `source_code_root_dir`) to force reprocess.
+    *   Example: `force_reprocess = ["schema_app_core/functions/is_employee_active.sql"]`
+*   `clear_history_for_file` (array of strings, optional): A list of file paths (relative to `source_code_root_dir`) to clear processing history for.
+    *   Example: `clear_history_for_file = ["schema_app_core/procedures/old_unused_procedure.sql"]`
+
+See the example `plsql_analyzer_config.toml` in the project root for more details and default values.
 
 ## Core Components
 
