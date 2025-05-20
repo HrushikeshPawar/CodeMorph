@@ -162,7 +162,15 @@ class GraphConstructor:
 
             # package_name is already casefolded by PLSQL_CodeObject
             current_package_context = codeobject.package_name if codeobject.package_name else "" # Use empty string for None package
-            object_simple_name = codeobject.name  
+            object_simple_name = codeobject.name
+
+            package_name_parts = current_package_context.split('.') if current_package_context else []
+            if len(package_name_parts) == 2:
+                _, package_name = package_name_parts
+            else:
+                _ = current_package_context
+                package_name = None
+            
 
             # Ensure package context exists in the package-wise map
             # 1. Register in package-wise structure (always uses simple_name within its package context)
@@ -176,6 +184,13 @@ class GraphConstructor:
             if codeobject.overloaded:
                 self._package_wise_code_object_names[current_package_context]["overloaded"].setdefault(object_simple_name, set()).add(codeobject)
                 self.logger.trace(f"Registered package-wise (overloaded): '{current_package_context}'.'{object_simple_name}' for {codeobject.id}")
+
+                if package_name:
+                    # If the package name is present, we can also register it in the global overloaded map
+                    # This allows for package-local resolution of overloaded calls
+                    self._overloaded_code_object_call_names.setdefault(f"{package_name}.{object_simple_name}", set()).add(codeobject)
+                    self.logger.trace(f"Registered globally (overloaded): '{package_name}.{object_simple_name}' for {codeobject.id}")
+
             else: # Not overloaded
                 if object_simple_name in self._package_wise_code_object_names[current_package_context]["normal"]:
                     existing_pkg_obj = self._package_wise_code_object_names[current_package_context]["normal"][object_simple_name]
@@ -184,8 +199,15 @@ class GraphConstructor:
                             f"Ambiguous non-overloaded name '{object_simple_name}' in package '{current_package_context}'. "
                             f"Existing ID: {existing_pkg_obj.id}, New ID: {codeobject.id}. Overwriting with new one for package-local resolution."
                         ) # This overwrite is the current behavior for package-local conflicts.
+
                 self._package_wise_code_object_names[current_package_context]["normal"][object_simple_name] = codeobject
                 self.logger.trace(f"Registered package-wise (normal): '{current_package_context}'.'{object_simple_name}' for {codeobject.id}")
+
+                if package_name:
+                    # If the package name is present, we can also register it in the global normal map
+                    # This allows for package-local resolution of non-overloaded calls
+                    self._code_object_call_names[f"{package_name}.{object_simple_name}"] = codeobject
+                    self.logger.trace(f"Registered globally (normal): '{package_name}.{object_simple_name}' for {codeobject.id}")
 
 
             # 2. Register globally (fully qualified names, intermediate names, and simple names for truly global objects)
