@@ -168,7 +168,11 @@ class ExtractionWorkflow:
                 extracted_calls: List[ExtractedCallTuple] = []
                 try:
                     # Pass the object source snippet and the already-created literal map to the call extractor
-                    extracted_calls = self.call_extractor.extract_calls_with_details(object_source_snippet, literal_map)
+                    extracted_calls = self.call_extractor.extract_calls_with_details(
+                        object_source_snippet,
+                        literal_map,
+                        allow_parameterless=self.config.allow_parameterless_calls
+                    )
                     obj_log_ctx.info(f"Extracted {len(extracted_calls)} calls for {actual_object_name}.")
                 except Exception as e:
                     obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {escape_angle_brackets(e)}")
