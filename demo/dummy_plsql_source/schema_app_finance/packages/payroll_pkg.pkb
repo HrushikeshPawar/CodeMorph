@@ -3,20 +3,20 @@ CREATE OR REPLACE PACKAGE BODY payroll_pkg AS
   PROCEDURE process_employee_payroll (
     p_emp_id IN NUMBER
   ) IS
-    v_emp_rec app_core.employee_pkg.t_employee_rec; -- Test: Inter-schema package type usage
+    v_emp_rec schema_app_core.employee_pkg.t_employee_rec; -- Test: Inter-schema package type usage
     v_formatted_date VARCHAR2(50);
     v_net_pay NUMBER;
     v_tax_amount NUMBER;
   BEGIN
-    util_common.logger_pkg.log_debug('Processing payroll for employee: ' || p_emp_id);
-    v_emp_rec := app_core.employee_pkg.get_employee(p_emp_id => p_emp_id); -- Test: Inter-schema package call
+    schema_util_common.logger_pkg.log_debug('Processing payroll for employee: ' || p_emp_id);
+    v_emp_rec := schema_app_core.employee_pkg.get_employee(p_emp_id => p_emp_id); -- Test: Inter-schema package call
 
     IF v_emp_rec.id IS NULL THEN
-      util_common.logger_pkg.log_error('Employee not found for payroll: ' || p_emp_id);
+      schema_util_common.logger_pkg.log_error('Employee not found for payroll: ' || p_emp_id);
       RETURN;
     END IF;
 
-    v_formatted_date := util_common.date_utils_pkg.format_date(SYSDATE, 'DD-MON-YYYY HH24:MI'); -- Test: Inter-schema utility call
+    v_formatted_date := schema_util_common.date_utils_pkg.format_date(SYSDATE, 'DD-MON-YYYY HH24:MI'); -- Test: Inter-schema utility call
 
     -- Test: More complex logic for ACC
     CASE -- Test: CASE statement
@@ -25,7 +25,7 @@ CREATE OR REPLACE PACKAGE BODY payroll_pkg AS
       WHEN v_emp_rec.salary < 60000 THEN
         v_tax_amount := calculate_tax(p_salary => v_emp_rec.salary, p_region_code => 'STATE_A'); -- Call to specific overload
       ELSE
-        IF v_emp_rec.dept_id = app_core.employee_pkg.g_default_dept_id THEN -- Test: Use constant from other schema.pkg
+        IF v_emp_rec.dept_id = schema_app_core.employee_pkg.g_default_dept_id THEN -- Test: Use constant from other schema.pkg
             v_tax_amount := calculate_tax(p_salary => v_emp_rec.salary, p_region_code => 'HIGH_EARNER_DEFAULT_DEPT');
         ELSE
             v_tax_amount := calculate_tax(p_salary => v_emp_rec.salary, p_region_code => 'HIGH_EARNER_OTHER_DEPT');
@@ -33,7 +33,7 @@ CREATE OR REPLACE PACKAGE BODY payroll_pkg AS
     END CASE;
 
     v_net_pay := v_emp_rec.salary - v_tax_amount;
-    util_common.logger_pkg.log_info('Payroll for ' || v_emp_rec.name || ' processed on ' || v_formatted_date || '. Net: ' || v_net_pay);
+    schema_util_common.logger_pkg.log_info('Payroll for ' || v_emp_rec.name || ' processed on ' || v_formatted_date || '. Net: ' || v_net_pay);
 
     -- Simulate dynamic SQL
     -- EXECUTE IMMEDIATE 'INSERT INTO audit_log (msg) VALUES (:msg)' USING 'Payroll processed for ' || p_emp_id;
@@ -66,7 +66,7 @@ CREATE OR REPLACE PACKAGE BODY payroll_pkg AS
     v_processed_region VARCHAR2(100);
     v_rate NUMBER := 0.10; -- default rate
   BEGIN
-    v_processed_region := util_common.string_utils_pkg.to_title_case(p_region_code); -- Test: Call utility
+    v_processed_region := schema_util_common.string_utils_pkg.to_title_case(p_region_code); -- Test: Call utility
 
     IF v_processed_region = 'State_A' THEN
       v_rate := 0.12;
@@ -87,7 +87,7 @@ CREATE OR REPLACE PACKAGE BODY payroll_pkg AS
     -- SELECT app_finance.payslip_id_seq.NEXTVAL ... (Conceptual)
 
     SYS.DBMS_OUTPUT.PUT_LINE('Payslip generated for employee ' || p_emp_id); -- Test: Call to SYS package
-    util_common.logger_pkg.log_info('Payslip generated for: ' || p_emp_id || ' for period ending ' || util_common.date_utils_pkg.format_date(p_pay_period_end));
+    schema_util_common.logger_pkg.log_info('Payslip generated for: ' || p_emp_id || ' for period ending ' || schema_util_common.date_utils_pkg.format_date(p_pay_period_end));
   END generate_payslip;
 
 END payroll_pkg;
