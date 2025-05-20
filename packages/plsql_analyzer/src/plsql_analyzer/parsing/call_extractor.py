@@ -351,7 +351,8 @@ class CallDetailExtractor:
             if parameter_tuple is None: # This call should be skipped
                 self.logger.trace(f"Skipping call '{call_info.call_name}' due to parameter extraction result (None).")
                 continue
-            
+
+            # Create a CallDetailsTuple with the extracted call and its parameters
             detailed_calls_list.append(
                 CallDetailsTuple(
                     call_name=call_info.call_name,
