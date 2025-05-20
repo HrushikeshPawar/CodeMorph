@@ -62,6 +62,11 @@ class AppConfig(BaseModel):
         description="List of keywords to drop during call extraction."
     )
 
+    allow_parameterless_calls: bool = Field(
+        default=False,
+        description="Whether to extract calls that do not have parameters, e.g., `my_procedure;` or `SYSDATE`."
+    )
+
     @property
     def artifacts_dir(self) -> Path:
         return self.output_base_dir
