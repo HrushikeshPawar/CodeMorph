@@ -36,7 +36,7 @@ class CallDetailExtractor:
         self.temp_extracted_calls_list: List[Tuple[str, int]] = []
         self.code_string_for_parsing = "" # Renamed for clarity
         self.cleaned_code = ""
-        self.allow_parameterless_config: bool = True # Default to True
+        self.allow_parameterless_config: bool = False # Default to False
         self._setup_parser()
 
     def _reset_internal_state(self):
@@ -219,12 +219,12 @@ class CallDetailExtractor:
         if current_idx >= len(self.cleaned_code) or self.cleaned_code[current_idx] != '(':
             # No opening parenthesis found, likely a parameter-less call (e.g., my_proc; or USER)
             # Or a call like SYSDATE (which might not have `()` in all contexts but pyparsing matched `SEMI` implicitly or explicitly)
-        if not self.allow_parameterless_config:
-            self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx} and allow_parameterless is False. Skipping call.")
-            return None # Indicate skipping this call
-        else:
-            self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx}. Assuming parameter-less as allow_parameterless is True.")
-            return CallParameterTuple([], {})
+            if not self.allow_parameterless_config:
+                self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx} and allow_parameterless is False. Skipping call.")
+                return None # Indicate skipping this call
+            else:
+                self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx}. Assuming parameter-less as allow_parameterless is True.")
+                return CallParameterTuple([], {})
 
         # We found '(', so start parsing parameters
         param_nested_lvl = 1 # We are inside the first level of parentheses

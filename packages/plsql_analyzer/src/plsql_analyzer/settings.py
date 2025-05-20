@@ -63,7 +63,7 @@ class AppConfig(BaseModel):
     )
 
     allow_parameterless_calls: bool = Field(
-        default=True,
+        default=False,
         description="Whether to extract calls that do not have parameters, e.g., `my_procedure;` or `SYSDATE`."
     )
 

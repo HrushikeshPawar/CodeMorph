@@ -270,11 +270,11 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
             """,
             True,
             [
-                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=31, end_idx=55, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
-                CallDetailsTuple(call_name='my_parameterless_proc', line_no=4, start_idx=31, end_idx=52, positional_params=[], named_params={}),
-                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=31, end_idx=43, positional_params=[], named_params={}),
-                CallDetailsTuple(call_name='SYSDATE', line_no=6, start_idx=42, end_idx=49, positional_params=[], named_params={}),
-                CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}),
+                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=35, end_idx=59, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
+                CallDetailsTuple(call_name='my_parameterless_proc', line_no=4, start_idx=105, end_idx=126, positional_params=[], named_params={}),
+                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=144, end_idx=156, positional_params=[], named_params={}),
+                # CallDetailsTuple(call_name='SYSDATE', line_no=6, start_idx=42, end_idx=49, positional_params=[], named_params={}), Dropped by default drop_keywords_list
+                # CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}), Dropped by default drop_keywords_list
             ]
         ),
         # Scenario: allow_parameterless = False
@@ -290,11 +290,11 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
             """,
             False,
             [
-                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=31, end_idx=55, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
-                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=31, end_idx=43, positional_params=[], named_params={}),
+                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=35, end_idx=59, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
+                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=144, end_idx=156, positional_params=[], named_params={}),
                 # my_parameterless_proc is skipped
                 # SYSDATE is skipped
-                CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}),
+                # CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}), # Will be dropped as is in the default list of keywords
             ]
         ),
         # Simpler case: only parameterless
@@ -314,7 +314,7 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
             False, # Should still be found as it has parens
             [CallDetailsTuple('my_proc', 1, 6, 13, [], {})]
         ),
-         (
+        (
             "BEGIN my_proc(); END;",
             True, # Should still be found
             [CallDetailsTuple('my_proc', 1, 6, 13, [], {})]
@@ -342,8 +342,7 @@ def test_extract_calls_parameterless_handling(extractor: CallDetailExtractor, co
         clean_code, literal_map, allow_parameterless=allow_parameterless_setting
     )
 
-    assert len(results) == len(expected_call_details), \
-        f"Expected {len(expected_call_details)} calls but got {len(results)}. Results: {results}"
+    assert len(results) == len(expected_call_details), f"Expected {len(expected_call_details)} calls but got {len(results)}. Results: {results}"
 
     # For detailed comparison, we can compare each field.
     # The provided expected_call_details have line numbers and indices relative to the *cleaned* code.
