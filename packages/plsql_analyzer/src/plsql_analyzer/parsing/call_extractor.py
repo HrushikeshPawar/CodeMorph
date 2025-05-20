@@ -309,7 +309,7 @@ class CallDetailExtractor:
 
         return CallParameterTuple(restored_positional_params, restored_named_params)
 
-    def extract_calls_with_details(self, cleaned_plsql_code: str, literal_mapping: Dict[str, str], allow_parameterless: bool = True) -> List[CallDetailsTuple]:
+    def extract_calls_with_details(self, cleaned_plsql_code: str, literal_mapping: Dict[str, str], allow_parameterless: bool = False) -> List[CallDetailsTuple]:
         """
         Main public method to extract all procedure/function calls with their parameters.
         
