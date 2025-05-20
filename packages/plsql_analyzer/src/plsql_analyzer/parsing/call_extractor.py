@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import loguru as lg
 import pyparsing as pp
-from typing import List, Tuple, Dict, NamedTuple
+from typing import List, Optional, Tuple, Dict, NamedTuple
 
 from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
@@ -193,7 +193,7 @@ class CallDetailExtractor:
         self.logger.debug(f"Found {len(extracted_calls_list)} potential calls in code block.")
         return extracted_calls_list
 
-    def _extract_call_params(self, call_info: ExtractedCallTuple) -> CallParameterTuple:
+    def _extract_call_params(self, call_info: ExtractedCallTuple) -> Optional[CallParameterTuple]:
         """
         Extracts parameters for a given call from the cleaned code.
         Based on the user-provided `extract_call_params` function.

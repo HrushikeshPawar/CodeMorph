@@ -159,7 +159,7 @@ def test_extract_calls_with_details(extractor:CallDetailExtractor, code, expecte
     """Tests the main public method with various PL/SQL snippets."""
 
     clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
-    results = extractor.extract_calls_with_details(clean_code, literal_map)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
     
     # Convert results to a comparable format (ignoring indices for simplicity in some cases if needed)
     # For now, compare everything including indices.
