@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 # Import components using the new configuration system
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 from plsql_analyzer.orchestration.extraction_workflow import ExtractionWorkflow
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
@@ -41,7 +41,7 @@ def run_profiler(func_to_profile, output_dir, *args, **kwargs):
     ps.print_stats()
     print(s.getvalue())
 
-    # Use output directory from AppConfig
+    # Use output directory from PLSQLAnalyzerSettings
     profile_output = output_dir / "profile_extraction_workflow.prof"
     profiler.dump_stats(profile_output)
     print(f"Profile data saved to: {profile_output}")
@@ -73,8 +73,8 @@ def profile_extraction_workflow_main():
             f.write(sql_content_to_write)
         mock_logger_instance.info(f"Created temp file: {temp_sql_file_path}")
 
-        # Create AppConfig instance
-        app_config = AppConfig(
+        # Create PLSQLAnalyzerSettings instance
+        app_config = PLSQLAnalyzerSettings(
             source_code_root_dir=temp_source_dir,
             output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
             log_verbose_level=0,  # Minimal logging for profiling

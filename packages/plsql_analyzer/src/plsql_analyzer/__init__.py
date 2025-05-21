@@ -1,7 +1,7 @@
 # plsql_analyzer/__init__.py
 from __future__ import annotations
 
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 from plsql_analyzer.utils.logging_setup import configure_logger
 from plsql_analyzer.utils.file_helpers import FileHelpers
 from plsql_analyzer.persistence.database_manager import DatabaseManager
@@ -11,7 +11,7 @@ from plsql_analyzer.parsing.call_extractor import CallDetailExtractor
 from plsql_analyzer.orchestration.extraction_workflow import ExtractionWorkflow
 
 __all__ = [
-AppConfig,
+PLSQLAnalyzerSettings,
 ExtractionWorkflow,
 DatabaseManager,
 PlSqlStructuralParser,

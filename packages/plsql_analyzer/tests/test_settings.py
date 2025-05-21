@@ -1,9 +1,9 @@
 import tempfile
 from pathlib import Path
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 
 def test_default_instantiation():
-    config = AppConfig(source_code_root_dir="/tmp")
+    config = PLSQLAnalyzerSettings(source_code_root_dir="/tmp")
     assert config.source_code_root_dir == Path("/tmp").resolve()
     assert config.output_base_dir == Path("generated/artifacts").resolve()
     assert config.log_verbose_level == 1
@@ -14,7 +14,7 @@ def test_default_instantiation():
     assert config.enable_profiler is False
 
 def test_override_values():
-    config = AppConfig(
+    config = PLSQLAnalyzerSettings(
         source_code_root_dir="src",
         output_base_dir="out",
         log_verbose_level=2,
@@ -33,14 +33,14 @@ def test_override_values():
     assert config.enable_profiler is True
 
 def test_derived_properties():
-    config = AppConfig(source_code_root_dir="/tmp", output_base_dir="/tmp/out", database_filename="foo.db")
+    config = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", output_base_dir="/tmp/out", database_filename="foo.db")
     assert config.artifacts_dir == Path("/tmp/out").resolve()
     assert config.logs_dir == Path("/tmp/out/logs/plsql_analyzer").resolve()
     assert config.database_path == Path("/tmp/out/foo.db").resolve()
 
 def test_ensure_artifact_dirs():
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = AppConfig(source_code_root_dir=tmpdir, output_base_dir=tmpdir)
+        config = PLSQLAnalyzerSettings(source_code_root_dir=tmpdir, output_base_dir=tmpdir)
         logs_dir = config.logs_dir
         assert not logs_dir.exists()
         config.ensure_artifact_dirs()
@@ -49,7 +49,7 @@ def test_ensure_artifact_dirs():
 
 def test_path_expansion(monkeypatch):
     monkeypatch.setenv("MY_TEST_DIR", "/tmp/mytest")
-    config = AppConfig(
+    config = PLSQLAnalyzerSettings(
         source_code_root_dir="~/../",  # Should expand user
         output_base_dir="$MY_TEST_DIR/subdir"  # Should expand env var
     )
