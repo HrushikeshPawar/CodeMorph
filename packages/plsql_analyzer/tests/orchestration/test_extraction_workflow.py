@@ -9,7 +9,7 @@ from plsql_analyzer.orchestration.extraction_workflow import ExtractionWorkflow
 # Note: All clean_code_and_map_literals tests have been moved to tests/utils/test_code_cleaner.py
 
 def test_extraction_workflow_force_reprocess(test_logger: lg.Logger):
-    """Test that force_reprocess from the AppConfig is correctly handled in _process_single_file."""
+    """Test that force_reprocess from the PLSQLAnalyzerSettings is correctly handled in _process_single_file."""
     
     mock_db_manager = MagicMock()
     mock_db_manager.get_file_hash.return_value = "current_hash_123"

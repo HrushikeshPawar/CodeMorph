@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import List, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, computed_field
 import os
 
-class AppConfig(BaseModel):
+class PLSQLAnalyzerSettings(BaseModel):
     """
     Centralized application configuration using Pydantic for type safety and validation.
     """
@@ -67,15 +67,15 @@ class AppConfig(BaseModel):
         description="Whether to extract calls that do not have parameters, e.g., `my_procedure;` or `SYSDATE`."
     )
 
-    @property
+    @computed_field
     def artifacts_dir(self) -> Path:
         return self.output_base_dir
 
-    @property
+    @computed_field
     def logs_dir(self) -> Path:
         return self.output_base_dir / "logs" / "plsql_analyzer"
 
-    @property
+    @computed_field
     def database_path(self) -> Path:
         return self.output_base_dir / self.database_filename
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from plsql_analyzer.orchestration.extraction_workflow import clean_code_and_map_literals
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 
 # --- Mock Logger (to minimize logging overhead during profiling) ---
 class MockLogger:
@@ -56,8 +56,8 @@ def read_sql_file(file_path_str: str) -> str | None:
         return None
 
 def profile_structural_parser_main():
-    # Create AppConfig instance
-    app_config = AppConfig(
+    # Create PLSQLAnalyzerSettings instance
+    app_config = PLSQLAnalyzerSettings(
         source_code_root_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data"),
         output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
         log_verbose_level=0,  # Minimal logging for profiling

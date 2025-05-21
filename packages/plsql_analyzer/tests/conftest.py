@@ -4,7 +4,7 @@ import pytest
 import loguru
 import sys
 
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 
 @pytest.fixture(scope="session")
 def test_logger() -> loguru.Logger:
@@ -39,7 +39,7 @@ def temp_db_path(tmp_path):
 
 @pytest.fixture
 def sample_app_config(tmp_path):
-    """Provides an AppConfig instance with test values."""
+    """Provides an PLSQLAnalyzerSettings instance with test values."""
     test_source_dir = tmp_path / "source"
     test_output_dir = tmp_path / "output"
     
@@ -47,7 +47,7 @@ def sample_app_config(tmp_path):
     test_source_dir.mkdir(parents=True, exist_ok=True)
     
     # Create a config instance with test values
-    config = AppConfig(
+    config = PLSQLAnalyzerSettings(
         source_code_root_dir=test_source_dir,
         output_base_dir=test_output_dir,
         log_verbose_level=3,  # TRACE for tests
