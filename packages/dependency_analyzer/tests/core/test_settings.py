@@ -24,7 +24,7 @@ class TestDependencyAnalyzerSettings:
         
         # Check that default values are set correctly
         assert isinstance(settings.output_base_dir, Path)
-        assert isinstance(settings.database_path, NoneType)
+        assert settings.database_path is None
         assert settings.log_verbose_level == LogLevel.INFO
         assert settings.default_graph_format == GraphFormat.GRAPHML
         assert settings.default_visualization_engine == VisualizationEngine.GRAPHVIZ
