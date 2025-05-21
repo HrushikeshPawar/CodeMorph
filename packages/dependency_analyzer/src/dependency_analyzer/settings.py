@@ -111,7 +111,7 @@ class DependencyAnalyzerSettings(BaseModel):
     
     @field_validator("output_base_dir", "database_path", mode="before")
     @classmethod
-    def expand_path(cls, v):
+    def expand_path(cls, v: Optional[Union[str, Path]]):
         """Expand and resolve paths."""
         if v is None:
             return v
