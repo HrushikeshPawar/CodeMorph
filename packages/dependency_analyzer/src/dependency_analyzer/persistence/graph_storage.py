@@ -13,7 +13,6 @@ from typing import Optional, Union
 import json
 
 from dependency_analyzer.utils.database_loader import DatabaseLoader
-from plsql_analyzer.core.code_object import PLSQL_CodeObject
 
 
 
@@ -57,10 +56,12 @@ class GraphStorage:
         Returns:
             bool: True if saving was successful, False otherwise.
         """
-        output_path = Path(output_path)
+        output_path = Path(output_path) if isinstance(output_path, str) else output_path
+        print(f"Saving graph to {output_path} in {format} format")
         
         # Create parent directories if they don't exist
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        self.logger.debug(f"Ensured parent directories exist for '{output_path}'")
         
         # If format is not specified, try to infer it from the file extension
         if format is None:
@@ -71,6 +72,10 @@ class GraphStorage:
         
         format = format.lower()
         self.logger.info(f"Saving graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges to '{output_path}' in '{format}' format")
+
+        # Remove all objects from the graph to save only the structure
+        # This is important for formats that cannot handle complex Python objects
+        graph = self.remove_codeobjects(graph)
         
         try:
             if format == 'gpickle':
@@ -144,68 +149,17 @@ class GraphStorage:
                 return None
             
             self.logger.info(f"Graph loaded from '{input_path}' with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
+
+            for node in graph.nodes:
+                if 'node_role' in graph.nodes[node]:
+                    # Ensure roles are stored as a set for consistency
+                    graph.nodes[node]['node_role'] = graph.nodes[node]['node_role'].split(', ')
+
             return graph
         
         except Exception as e:
             self.logger.error(f"Error loading graph from '{input_path}' in '{format}' format: {e}", exc_info=True)
             return None
-
-    def save_structure_only(
-        self, graph: nx.DiGraph, output_path: Union[str, Path], format: Optional[str] = None
-    ) -> bool:
-        """
-        Save only the structure (nodes and edges) of a NetworkX DiGraph, without PLSQL_CodeObject data.
-
-        Args:
-            graph: The NetworkX DiGraph to save.
-            output_path: Path where the graph will be saved.
-            format: Format to use for saving. If None, inferred from the file extension.
-                   Valid formats: 'gpickle', 'graphml', 'gexf', 'json'.
-
-        Returns:
-            bool: True if saving was successful, False otherwise.
-        """
-        output_path = Path(output_path)
-        
-        # Create parent directories if they don't exist
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # If format is not specified, try to infer it from the file extension
-        if format is None:
-            format = output_path.suffix.lstrip('.')
-            if not format:
-                self.logger.error(f"Cannot infer format from '{output_path}'. No file extension provided.")
-                return False
-        
-        format = format.lower()
-        self.logger.info(f"Saving structure-only graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges to '{output_path}' in '{format}' format")
-        
-        try:
-            # Create a clean graph with only node IDs and basic attributes (no PLSQL_CodeObject instances)
-            structure_graph = self.extract_structure_only(graph)
-            
-            # Save the clean structure graph
-            if format == 'gpickle':
-                nx.write_gpickle(structure_graph, output_path)
-            elif format == 'graphml':
-                nx.write_graphml(structure_graph, output_path)
-            elif format == 'gexf':
-                nx.write_gexf(structure_graph, output_path)
-            elif format == 'json' or format == 'node_link':
-                # Convert to serializable format
-                data = nx.node_link_data(structure_graph, edges="edges")
-                with open(output_path, 'w') as f:
-                    json.dump(data, f, indent=2)
-            else:
-                self.logger.error(f"Unsupported graph format: '{format}'. Use 'gpickle', 'graphml', 'gexf', or 'json'.")
-                return False
-            
-            self.logger.info(f"Graph structure successfully saved to '{output_path}'")
-            return True
-        
-        except Exception as e:
-            self.logger.error(f"Error saving graph structure to '{output_path}' in '{format}' format: {e}", exc_info=True)
-            return False
 
     def load_and_populate(
         self, 
@@ -263,7 +217,7 @@ class GraphStorage:
             self.logger.error(f"Error populating graph with code objects: {e}", exc_info=True)
             return structure_graph  # Return the structure graph even if population fails
 
-    def extract_structure_only(self, graph: nx.DiGraph) -> nx.DiGraph:
+    def remove_codeobjects(self, graph: nx.DiGraph) -> nx.DiGraph:
         """
         Create a new graph with only the structure (nodes and edges) of the input graph,
         without the PLSQL_CodeObject instances.

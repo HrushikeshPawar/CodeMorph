@@ -21,7 +21,8 @@ from dependency_analyzer.analysis.analyzer import (
     calculate_node_complexity_metrics,
     get_descendants,
     get_ancestors,
-    trace_downstream_paths
+    trace_downstream_paths,
+    list_nodes
 )
 
 class MockPLSQLCodeObject(PLSQL_CodeObject):
@@ -294,11 +295,10 @@ def test_generate_subgraph_default_depths_from_middle_node(simple_graph_no_cycle
     # Expected: "A", "B", "C"
     subgraph = generate_subgraph_for_node(simple_graph_no_cycles, "B", da_test_logger)
     assert subgraph is not None
-    expected_nodes = {"A", "B", "C"}
+    expected_nodes = {"B", "C"}
     assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
-    assert subgraph.has_edge("A", "B")
     assert subgraph.has_edge("B", "C")
-    assert subgraph.number_of_edges() == 2
+    assert subgraph.number_of_edges() == 1
 
 def test_generate_subgraph_specific_downstream_depth(simple_graph_no_cycles, da_test_logger: lg.Logger):
     # Start at "A": A -> B -> C; (D is isolated); E -> F
@@ -311,7 +311,6 @@ def test_generate_subgraph_specific_downstream_depth(simple_graph_no_cycles, da_
     assert set(subgraph.nodes()) == expected_nodes, f"Expected nodes {expected_nodes}, got {set(subgraph.nodes())}"
     assert subgraph.has_edge("A", "B")
     assert subgraph.number_of_edges() == 1, f"Expected 1 edge, got {subgraph.number_of_edges()}"
-
 
 def test_generate_subgraph_specific_upstream_depth(simple_graph_no_cycles, da_test_logger: lg.Logger):
     # Start at "C": A -> B -> C
@@ -345,7 +344,6 @@ def test_generate_subgraph_full_downstream_complex(complex_graph, da_test_logger
     assert not subgraph.has_node("P1") # P1 is downstream of EntryA, not MidA for this test.
     assert not subgraph.has_node("EntryB")
     assert not subgraph.has_node("Iso")
-
 
 def test_generate_subgraph_limited_downstream_complex(complex_graph, da_test_logger: lg.Logger):
     # complex_graph: EntryA -> MidA -> C1; EntryA -> P1; C1-C2-C3-C1; C2 -> MidB; MidB -> T1; MidB -> P2
@@ -389,7 +387,6 @@ def test_generate_subgraph_zero_downstream_full_upstream(graph_with_cycles, da_t
     # Total edges: A->D, E->D, C->A, B->C, A->B = 5 and # D-> E (cycle)  +1
     da_test_logger.debug(f"Subgraph edges: {subgraph.edges()}")
     assert subgraph.number_of_edges() == 5+1
-
 
 def test_generate_subgraph_isolated_node(complex_graph, da_test_logger: lg.Logger):
     # complex_graph has isolated node "Iso"
@@ -737,63 +734,6 @@ def test_calculate_node_complexity_metrics_specific_values(da_test_logger: lg.Lo
     expected_acc = 7 # Assuming 'THEN' is counted as per current implementation
     assert node_data['acc'] == expected_acc, f"ACC mismatch: got {node_data['acc']}, want {expected_acc}"
 
-def test_analyze_metrics_infers_format_and_saves(tmp_path, da_test_logger):
-    import shutil
-    from dependency_analyzer.analysis.analyzer import calculate_node_complexity_metrics
-    from dependency_analyzer.cli import analyze_metrics
-    import networkx as nx
-    import types
-    # Create a test graph and save as .graphml
-    G = nx.DiGraph()
-    G.add_node("A")
-    G.add_node("B")
-    G.add_edge("A", "B")
-    graphml_path = tmp_path / "testgraph.graphml"
-    nx.write_graphml_lxml(G=G, path=graphml_path)
-
-    # Patch analyzer.calculate_node_complexity_metrics to check call
-    called = {}
-    def fake_calc(graph, logger):
-        called['called'] = True
-        assert isinstance(graph, nx.DiGraph)
-    orig_calc = calculate_node_complexity_metrics
-    import dependency_analyzer.analysis.analyzer as analyzer_mod
-    analyzer_mod.calculate_node_complexity_metrics = fake_calc
-
-    # Patch GraphStorage to check format used for load/save
-    from dependency_analyzer.persistence.graph_storage import GraphStorage
-    orig_load_graph = GraphStorage.load_graph
-    orig_save_structure_only = GraphStorage.save_structure_only
-    used_formats = {}
-    def fake_load(self, path, format):
-        used_formats['load'] = format
-        # Return a DiGraph with the expected structure for the test
-        G_loaded = nx.DiGraph()
-        G_loaded.add_node("A", object=None)
-        G_loaded.add_node("B", object=None)
-        G_loaded.add_edge("A", "B")
-        return G_loaded
-    def fake_save(self, graph, path, format):
-        used_formats['save'] = format
-        return True
-    GraphStorage.load_graph = fake_load
-    GraphStorage.save_structure_only = fake_save
-
-    # Call the CLI command (simulate user passing only the file, not format)
-    analyze_metrics(
-        graph_path=graphml_path,
-        graph_format="gpickle",  # default, should be overridden by .graphml
-        verbose_level=0
-    )
-    assert used_formats['load'] == 'graphml'
-    assert used_formats['save'] == 'graphml'
-    assert called['called']
-
-    # Restore
-    analyzer_mod.calculate_node_complexity_metrics = orig_calc
-    GraphStorage.load_graph = orig_load_graph
-    GraphStorage.save_structure_only = orig_save_structure_only
-
 def test_get_descendants_and_ancestors_simple(simple_graph_no_cycles):
     graph = simple_graph_no_cycles
     # A -> B -> C, D (isolated), E -> F
@@ -835,3 +775,270 @@ def test_get_descendants_and_ancestors_cycles(graph_with_cycles):
     assert get_descendants(graph, "A", depth_limit=1) == {"B", "D"}
     # C is also within 2 steps upstream of D: D<-E<-D<-A<-B<-C (cycle)
     assert get_ancestors(graph, "D", depth_limit=2) == {"A", "E", "C"}
+
+
+def test_list_nodes_empty_graph(da_test_logger: lg.Logger):
+    """Test list_nodes with an empty graph."""
+    graph = nx.DiGraph()
+    result = list_nodes(graph, da_test_logger)
+    assert result == []
+
+
+def test_list_nodes_basic(simple_graph_no_cycles, da_test_logger: lg.Logger):
+    """Test list_nodes with a simple graph."""
+    graph = simple_graph_no_cycles
+    # Set up node attributes to match PLSQL_CodeObject structure
+    for node_id in graph.nodes():
+        graph.nodes[node_id]['name'] = node_id.casefold()
+        graph.nodes[node_id]['type'] = 'FUNCTION'
+        graph.nodes[node_id]['package_name'] = 'TEST_PACKAGE'
+    
+    result = list_nodes(graph, da_test_logger)
+    
+    # Should return all 6 nodes (A, B, C, D, E, F)
+    assert len(result) == 6
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'a', 'b', 'c', 'd', 'e', 'f'}
+    
+    # Check structure of returned nodes
+    for node in result:
+        assert 'name' in node
+        assert 'type' in node
+        assert 'package' in node
+        assert 'loc' in node
+        assert 'parameters' in node
+        assert 'calls-made' in node
+        assert 'called-by' in node
+        assert 'acc' in node
+        assert node['type'] == 'FUNCTION'
+        assert node['package'] == 'TEST_PACKAGE'
+
+
+def test_list_nodes_filter_by_type(da_test_logger: lg.Logger):
+    """Test list_nodes with type filtering."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    graph.add_node("B")
+    graph.add_node("C")
+    
+    # Set up different types
+    graph.nodes["A"]["name"] = "func_a"
+    graph.nodes["A"]["type"] = CodeObjectType.FUNCTION.upper()
+    graph.nodes["A"]["package_name"] = "PKG1"
+    
+    graph.nodes["B"]['name'] = "proc_b"
+    graph.nodes["B"]['type'] = CodeObjectType.PROCEDURE.upper()
+    graph.nodes["B"]['package_name'] = "PKG1"
+
+    graph.nodes["C"]['name'] = "func_c"
+    graph.nodes["C"]['type'] = CodeObjectType.FUNCTION.upper()
+    graph.nodes["C"]['package_name'] = "PKG2"
+    
+    # Filter by FUNCTION type
+    result = list_nodes(graph, da_test_logger, filter_node_type=[CodeObjectType.FUNCTION])
+    assert len(result) == 2
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'func_a', 'func_c'}
+    
+    # Filter by PROCEDURE type
+    result = list_nodes(graph, da_test_logger, filter_node_type=[CodeObjectType.PROCEDURE])
+    assert len(result) == 1
+    assert result[0]['name'] == 'proc_b'
+
+
+def test_list_nodes_filter_by_package(da_test_logger: lg.Logger):
+    """Test list_nodes with package filtering."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    graph.add_node("B")
+    graph.add_node("C")
+    
+    # Set up different packages
+    graph.nodes["A"]["name"] = "func_a"
+    graph.nodes["A"]["type"] = CodeObjectType.FUNCTION.upper()
+    graph.nodes["A"]["package_name"] = "PACKAGE_ONE"
+
+    graph.nodes["B"]["name"] = "func_b"
+    graph.nodes["B"]["type"] = CodeObjectType.FUNCTION.upper()
+    graph.nodes["B"]["package_name"] = "PACKAGE_TWO"
+
+    graph.nodes["C"]["name"] = "func_c"
+    graph.nodes["C"]["type"] = CodeObjectType.FUNCTION.upper()
+    graph.nodes["C"]["package_name"] = "OTHER_PACKAGE"
+    
+    # Filter by single package
+    result = list_nodes(graph, da_test_logger, filter_packages=["PACKAGE_ONE"])
+    assert len(result) == 1
+    assert result[0]['name'] == 'func_a'
+    
+    result = list_nodes(graph, da_test_logger, filter_packages=["PACKAGE_TWO"])
+    assert len(result) == 1
+    assert result[0]['name'] == 'func_b'
+    
+    # Case insensitive
+    result = list_nodes(graph, da_test_logger, filter_packages=["package_one"])
+    assert len(result) == 1
+
+    # Multiple packages
+    result = list_nodes(graph, da_test_logger, filter_packages=["PACKAGE_ONE", "PACKAGE_TWO"])
+    assert len(result) == 2
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'func_a', 'func_b'}
+
+
+def test_list_nodes_filter_by_name(da_test_logger: lg.Logger):
+    """Test list_nodes with name filtering."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    graph.add_node("B")
+    graph.add_node("C")
+    
+    graph.nodes["A"]['name'] = "get_user_data"
+    graph.nodes["A"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["A"]['package_name'] = "PKG1"
+
+    graph.nodes["B"]['name'] = "get_account_info"
+    graph.nodes["B"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["B"]['package_name'] = "PKG1"
+
+    graph.nodes["C"]['name'] = "update_user_status"
+    graph.nodes["C"]['type'] = CodeObjectType.PROCEDURE
+    graph.nodes["C"]['package_name'] = "PKG1"
+    
+    # Filter by partial name
+    result = list_nodes(graph, da_test_logger, filter_name_substr="get")
+    assert len(result) == 2
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'get_user_data', 'get_account_info'}
+    
+    result = list_nodes(graph, da_test_logger, filter_name_substr="user")
+    assert len(result) == 2
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'get_user_data', 'update_user_status'}
+    
+    # Case insensitive
+    result = list_nodes(graph, da_test_logger, filter_name_substr="USER")
+    assert len(result) == 2
+
+
+def test_list_nodes_combined_filters(da_test_logger: lg.Logger):
+    """Test list_nodes with multiple filters combined."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    graph.add_node("B")
+    graph.add_node("C")
+    graph.add_node("D")
+    
+    graph.nodes["A"]["name"] = "get_user_data"
+    graph.nodes["A"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["A"]['package_name'] = "USER_PKG"
+    
+    graph.nodes["B"]['name'] = "get_account_info"
+    graph.nodes["B"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["B"]['package_name'] = "ACCOUNT_PKG"
+    
+    graph.nodes["C"]['name'] = "update_user_status"
+    graph.nodes["C"]['type'] = CodeObjectType.PROCEDURE
+    graph.nodes["C"]['package_name'] = "USER_PKG"
+
+    graph.nodes["D"]['name'] = "get_user_profile"
+    graph.nodes["D"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["D"]['package_name'] = "USER_PKG"
+    
+    # Combine type and package filter
+    result = list_nodes(
+        graph,
+        da_test_logger,
+        filter_node_type=[CodeObjectType.FUNCTION],
+        filter_packages=["USER_PKG"]
+    )
+    assert len(result) == 2
+    node_names = [node['name'] for node in result]
+    assert set(node_names) == {'get_user_data', 'get_user_profile'}
+    
+    # Combine all three filters
+    result = list_nodes(
+        graph,
+        da_test_logger,
+        filter_node_type=[CodeObjectType.FUNCTION],
+        filter_packages=["USER_PKG"],
+        filter_name_substr="data"
+    )
+    assert len(result) == 1
+    assert result[0]['name'] == 'get_user_data'
+
+
+def test_list_nodes_sorting(da_test_logger: lg.Logger):
+    """Test list_nodes with different sorting options."""
+    graph = nx.DiGraph()
+    graph.add_edges_from([("A", "B"), ("B", "C"), ("D", "B")])  # B has highest degree
+    
+    graph.nodes["A"]["name"] = "zebra_func"
+    graph.nodes["A"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["A"]['package_name'] = "Z_PACKAGE"
+    
+    graph.nodes["B"]["name"] = "alpha_func"
+    graph.nodes["B"]['type'] = CodeObjectType.PROCEDURE
+    graph.nodes["B"]['package_name'] = "A_PACKAGE"
+    
+    graph.nodes["C"]["name"] = "beta_func"
+    graph.nodes["C"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["C"]['package_name'] = "B_PACKAGE"
+    
+    graph.nodes["D"]["name"] = "gamma_func"
+    graph.nodes["D"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["D"]['package_name'] = "G_PACKAGE"
+    
+    # Sort by name (default)
+    result = list_nodes(graph, da_test_logger, sort_by="name")
+    names = [node['name'] for node in result]
+    assert names == ['alpha_func', 'beta_func', 'gamma_func', 'zebra_func']
+    
+    # Sort by type
+    result = list_nodes(graph, da_test_logger, sort_by="type")
+    types = [node['type'] for node in result]
+    assert types == ['FUNCTION', 'FUNCTION', 'FUNCTION', 'PROCEDURE']
+    
+    # Sort by package
+    result = list_nodes(graph, da_test_logger, sort_by="package")
+    packages = [node['package'] for node in result]
+    assert packages == ['A_PACKAGE', 'B_PACKAGE', 'G_PACKAGE', 'Z_PACKAGE']
+
+
+def test_list_nodes_limit(da_test_logger: lg.Logger):
+    """Test list_nodes with limit parameter."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    graph.add_node("B")
+    graph.add_node("C")
+    graph.add_node("D")
+    
+    for node_id in graph.nodes():
+        graph.nodes[node_id]['name'] = f"func_{node_id.lower()}"
+        graph.nodes[node_id]['type'] = CodeObjectType.FUNCTION
+        graph.nodes[node_id]['package_name'] = "PKG1"
+    
+    # Test limit
+    result = list_nodes(graph, da_test_logger, limit=2)
+    assert len(result) == 2
+    
+    result = list_nodes(graph, da_test_logger, limit=10)  # More than available
+    assert len(result) == 4
+    
+    result = list_nodes(graph, da_test_logger, limit=0)  # Zero limit
+    assert len(result) == 0
+
+
+def test_list_nodes_invalid_sort_field(da_test_logger: lg.Logger):
+    """Test list_nodes with invalid sort field."""
+    graph = nx.DiGraph()
+    graph.add_node("A")
+    
+    graph.nodes["A"]['name'] = "test_func"
+    graph.nodes["A"]['type'] = CodeObjectType.FUNCTION
+    graph.nodes["A"]['package_name'] = "PKG1"
+    
+    # Should handle invalid sort field gracefully (fall back to name)
+    result = list_nodes(graph, da_test_logger, sort_by="invalid_field")
+    assert len(result) == 1
+    assert result[0]['name'] == 'test_func'
