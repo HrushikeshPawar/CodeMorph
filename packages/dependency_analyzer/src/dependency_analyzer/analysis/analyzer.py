@@ -620,7 +620,7 @@ def classify_nodes(
     node_complexity = {}
     if complexity_metrics_available:
         for node_id, data in graph.nodes(data=True):
-            node_complexity[node_id] = data.get('acc', 0)  # Use 'loc' as a proxy
+            node_complexity[node_id] = data.get('acc', 0)
     # --- Assign roles ---
     for node_id in graph.nodes():
         roles = []
@@ -651,7 +651,7 @@ def classify_nodes(
         if out_degrees[node_id] == 0:
             roles.append('terminal_node')
 
-        graph.nodes[node_id]['node_role'] = ", ".join(roles) if roles else []
+        graph.nodes[node_id]['node_role'] = ", ".join(roles) if roles else ""
         logger.debug(f"Node {node_id}: roles={roles}")
     logger.info("Node classification complete.")
 
@@ -692,11 +692,20 @@ def list_nodes(
     # Extract information for each node
     for node_id, node_data in graph.nodes(data=True):
 
+        node_type = node_data.get('type', 'UNKNOWN')  # Default to UNKNOWN if not set
+        if isinstance(node_type, str):
+            node_type = node_type.upper()
+        elif isinstance(node_type, CodeObjectType):
+            node_type = node_type.name.upper()
+        else:
+            logger.warning(f"Node '{node_id}' has an unexpected type: {node_type}. Defaulting to UNKNOWN.")
+            node_type = 'UNKNOWN'
+
         # Extract basic information
         node_info = {
             'id': node_id,
             'name': node_data['name'],
-            'type': node_data.get('type', 'UNKNOWN').upper(),
+            'type': node_type,
             'package': node_data['package_name'] if 'package_name' in node_data else '',
             'loc': node_data.get('loc', None),  # Lines of Code
             'parameters': node_data.get('num_params', None),  # Number of parameters
@@ -732,7 +741,7 @@ def list_nodes(
     elif sort_by == "package":
         nodes_info.sort(key=lambda x: (x['package'].lower(), x['name'].lower()))
     elif sort_by == "degree":
-        nodes_info.sort(key=lambda x: (x['in_degree'] + x['out_degree'], x['name'].lower()), reverse=True)
+        nodes_info.sort(key=lambda x: (x['calls-made'] + x['called-by'], x['name'].lower()), reverse=True)
     elif sort_by == "acc":
         nodes_info.sort(key=lambda x: (x['acc'] if x['acc'] is not None else float('inf'), x['name'].lower()))
     else:
@@ -813,10 +822,20 @@ def analyze_cycles_enhanced(
                 for node in cycle:
                     if node in graph:
                         node_data = graph.nodes[node]
+
+                        node_type = node_data.get('type', 'UNKNOWN')  # Default to UNKNOWN if not set
+                        if isinstance(node_type, str):
+                            node_type = node_type.upper()
+                        elif isinstance(node_type, CodeObjectType):
+                            node_type = node_type.name.upper()
+                        else:
+                            logger.warning(f"Node '{node}' has an unexpected type: {node_type}. Defaulting to UNKNOWN.")
+                            node_type = 'UNKNOWN'                            
+
                         detail = {
                             'id': node,
                             'name': node_data.get('name', node),
-                            'type': node_data.get('type', 'UNKNOWN'),
+                            'type': node_type,
                             'package': node_data.get('package_name', ''),
                             'in_degree': graph.in_degree(node),
                             'out_degree': graph.out_degree(node)

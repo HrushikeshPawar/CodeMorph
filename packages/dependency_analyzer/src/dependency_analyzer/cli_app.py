@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional, Annotated
+from typing import Optional, Annotated, List
 from loguru import logger
 
 from cyclopts import App, Parameter
@@ -104,7 +104,7 @@ def build_full(
             settings.database_path = db_path
         
         if graph_format:
-            settings.graph_format = GraphFormat(graph_format.casefold())
+            settings.graph_format = graph_format
 
         settings.log_verbose_level = verbose
 
@@ -288,7 +288,7 @@ def query_reachability(
     node_id: Annotated[str, node_id_param()],
     config_file: Annotated[Path, config_file_param(True)],
     verbose: Annotated[int, verbose_param()] = 1,
-    graph_format: Annotated[Optional[str], graph_format_param()] = None,
+    graph_format: Annotated[Optional[GraphFormat], graph_format_param()] = None,
     downstream: Annotated[bool, Parameter(
         help="Show descendants (downstream reachability)."
     )] = True,
@@ -368,8 +368,8 @@ def query_list(
     config_file: Annotated[Path, config_file_param(True)],
     verbose: Annotated[int, verbose_param()] = 1,
     graph_format: Annotated[Optional[str], graph_format_param()] = None,
-    node_type: Annotated[Optional[str], node_type_filter_param()] = None,
-    package: Annotated[Optional[str], package_filter_param()] = None,
+    node_type: Annotated[List[str], node_type_filter_param()] = [],
+    package: Annotated[List[str], package_filter_param()] = [],
     name: Annotated[Optional[str], name_filter_param()] = None,
     limit: Annotated[Optional[int], limit_param()] = None,
     sort_by: Annotated[str, sort_by_param()] = "name"
@@ -378,16 +378,18 @@ def query_list(
     try:
         settings = DependencyAnalyzerSettings.from_toml(config_file)
         
-        settings.graph_format = graph_format
+        if graph_format:
+            settings.graph_format = graph_format
+
         settings.log_verbose_level = verbose
 
         service = CLIService(settings)
         service.query_list_nodes(
             input_path=input_path,
             graph_format=graph_format,
-            node_type=node_type,
-            package=package,
-            name=name,
+            filter_node_type=node_type,
+            filter_packages=package,
+            filter_name_substr=name,
             limit=limit,
             sort_by=sort_by
         )

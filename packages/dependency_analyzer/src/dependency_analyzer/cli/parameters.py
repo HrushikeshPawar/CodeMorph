@@ -7,22 +7,18 @@ to ensure consistency across commands and reduce duplication.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Annotated
+from typing import Optional, Annotated, Sequence
 
 import cyclopts
-from cyclopts import Parameter
+from cyclopts import Parameter, Token
 
 from dependency_analyzer.cli.constants import PARAMETER_HELP, VERBOSE_LEVEL_RANGE
+from dependency_analyzer.settings import GraphFormat
 
 
-def convert_to_path(_, path_str) -> Optional[Path]:
+def convert_to_path(_, path_str: Sequence[Token]) -> Optional[Path]:
     """Convert string to Path object."""
-    if hasattr(path_str, '__iter__') and hasattr(path_str[0], 'value'):
-        # Handle Token objects from cyclopts
-        return Path(path_str[0].value) if path_str[0].value else None
-    elif isinstance(path_str, str) and path_str:
-        return Path(path_str)
-    return None
+    return Path(path_str[0].value) if path_str else None
 
 
 def validate_path_exists(_, path: Optional[Path]):
@@ -37,6 +33,17 @@ def validate_verbose_level(_, level: int):
         raise cyclopts.ValidationError(
             f"Verbose level must be between {VERBOSE_LEVEL_RANGE[0]} and {VERBOSE_LEVEL_RANGE[1]}"
         )
+
+def convert_to_graph_format(_, format_str: Sequence[Token]) -> GraphFormat:
+    """Convert string to GraphFormat enum."""
+    if format_str is None:
+        return GraphFormat.GRAPHML
+        
+    try:
+        return GraphFormat[format_str[0].value.upper()]
+    except KeyError:
+        raise cyclopts.ValidationError(f"Invalid graph format: {format_str[0].value}. Must be one of: {', '.join(GraphFormat._member_names_)}")
+    
 
 
 # Common parameter factories
@@ -104,7 +111,9 @@ def graph_format_param():
     """Create a graph format parameter."""
     return Parameter(
         name=["--format", "-f"],
-        help=PARAMETER_HELP['format']
+        help=PARAMETER_HELP['format'],
+        converter=convert_to_graph_format,
+        # validator=lambda _, fmt: fmt.casefold() in [x.casefold() for x in GraphFormat._member_names_ if fmt]  # Validate against enum names
     )
 
 
@@ -135,7 +144,8 @@ def node_type_filter_param():
     """Create a node type filter parameter."""
     return Parameter(
         name=["--type", "-t"],
-        help="Filter nodes by type. Options: PACKAGE, PROCEDURE, FUNCTION, TRIGGER, TYPE, UNKNOWN"
+        help="Filter nodes by type. Multiple types can be specified. Options: PACKAGE, PROCEDURE, FUNCTION, TRIGGER, TYPE, UNKNOWN",
+        consume_multiple=True,
     )
 
 
@@ -143,7 +153,8 @@ def package_filter_param():
     """Create a package filter parameter."""
     return Parameter(
         name=["--package", "-p"], 
-        help="Filter nodes by package name (case-insensitive substring match)"
+        help="Filter nodes by package name (case-insensitive substring match)",
+        consume_multiple=True,
     )
 
 

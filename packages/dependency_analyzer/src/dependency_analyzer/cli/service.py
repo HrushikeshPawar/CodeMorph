@@ -706,9 +706,9 @@ class CLIService:
     def query_list_nodes(
         self,
         input_path: Path,
-        node_type: Optional[str] = None,
-        package: Optional[str] = None,
-        name: Optional[str] = None,
+        filter_node_type: List[str] = [],
+        filter_packages: List[str] = [],
+        filter_name_substr: Optional[str] = None,
         limit: Optional[int] = None,
         sort_by: str = "name",
         graph_format: Optional[str] = None
@@ -750,9 +750,9 @@ class CLIService:
         nodes_info = analyzer.list_nodes(
             graph, 
             self.logger,
-            node_type=node_type,
-            package=package,
-            name=name,
+            filter_node_type=filter_node_type,
+            filter_packages=filter_packages,
+            filter_name_substr=filter_name_substr,
             limit=limit,
             sort_by=sort_by
         )
