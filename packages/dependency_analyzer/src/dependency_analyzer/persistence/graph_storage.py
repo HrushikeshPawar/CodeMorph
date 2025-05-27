@@ -57,7 +57,7 @@ class GraphStorage:
             bool: True if saving was successful, False otherwise.
         """
         output_path = Path(output_path) if isinstance(output_path, str) else output_path
-        print(f"Saving graph to {output_path} in {format} format")
+        self.logger.info(f"Saving graph to {output_path} in {format} format")
         
         # Create parent directories if they don't exist
         output_path.parent.mkdir(parents=True, exist_ok=True)
