@@ -7,7 +7,7 @@ import os
 import tempfile
 import networkx as nx
 import loguru as lg
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from enum import Enum
 
 from dependency_analyzer.persistence.graph_storage import GraphStorage
@@ -218,35 +218,13 @@ def test_parent_directory_creation(da_test_logger: lg.Logger, test_graph, temp_d
     assert result is True
     assert os.path.exists(file_path)
 
-def test_extract_structure_only(da_test_logger, test_graph_with_objects):
-    """Test extracting structure-only graph from a graph with code objects"""
-    storage = GraphStorage(da_test_logger)
-    
-    # Extract structure-only graph
-    structure_graph = storage.extract_structure_only(test_graph_with_objects)
-    
-    # Verify nodes and edges are preserved
-    assert structure_graph.number_of_nodes() == test_graph_with_objects.number_of_nodes()
-    assert structure_graph.number_of_edges() == test_graph_with_objects.number_of_edges()
-    
-    # Verify node IDs are preserved
-    assert set(structure_graph.nodes()) == set(test_graph_with_objects.nodes())
-    
-    # Verify code objects are not present, but their basic attributes are
-    for node_id in structure_graph.nodes():
-        assert 'object' not in structure_graph.nodes[node_id]
-        assert 'object_id' in structure_graph.nodes[node_id]
-        assert 'name' in structure_graph.nodes[node_id]
-        assert 'package_name' in structure_graph.nodes[node_id]
-        assert structure_graph.nodes[node_id]['object_id'] == node_id
-
 def test_save_structure_only(da_test_logger, test_graph_with_objects, temp_dir):
     """Test saving only the structure of a graph with code objects"""
     storage = GraphStorage(da_test_logger)
     file_path = os.path.join(temp_dir, "test_structure.json")
     
     # Save structure-only graph
-    result = storage.save_structure_only(test_graph_with_objects, file_path)
+    result = storage.save_graph(test_graph_with_objects, file_path)
     assert result is True
     assert os.path.exists(file_path)
     
@@ -268,7 +246,7 @@ def test_load_and_populate(da_test_logger, test_graph_with_objects, mock_databas
     file_path = os.path.join(temp_dir, "test_structure.json")
     
     # First save structure-only graph
-    storage.save_structure_only(test_graph_with_objects, file_path)
+    storage.save_graph(test_graph_with_objects, file_path)
     
     # Load and populate with objects from mock database loader
     populated_graph = storage.load_and_populate(file_path, mock_database_loader)

@@ -24,24 +24,25 @@ def configure_logger(verbose_lvl: int, log_dir: Path) -> lg.Logger:
     global_logger.remove()  # Remove previous handlers to avoid duplicates
 
     # --- Console Logging Level (Determined by verbose_lvl) ---
-    console_level: str
-    if verbose_lvl == 0:
-        console_level = "WARNING"
-    elif verbose_lvl == 1:
-        console_level = "INFO"
-    elif verbose_lvl == 2:
-        console_level = "DEBUG"
-    else:  # verbose_lvl >= 3
-        console_level = "TRACE"
+    if verbose_lvl >= 0:
+        console_level: str
+        if verbose_lvl == 0:
+            console_level = "WARNING"
+        elif verbose_lvl == 1:
+            console_level = "INFO"
+        elif verbose_lvl == 2:
+            console_level = "DEBUG"
+        else:  # verbose_lvl >= 3
+            console_level = "TRACE"
 
-    # --- Add Console Sink ---
-    global_logger.add(
-        sys.stderr,
-        level=console_level,
-        colorize=True,
-        format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
-    )
-    global_logger.info(f"Console logging configured to level: {console_level}")
+        # --- Add Console Sink ---
+        global_logger.add(
+            sys.stderr,
+            level=console_level,
+            colorize=True,
+            format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        )
+        global_logger.info(f"Console logging configured to level: {console_level}")
 
     # --- Add Fixed TRACE File Sink --- #
     current_datetime = datetime.now().strftime("%Y%m%d_%Hh")

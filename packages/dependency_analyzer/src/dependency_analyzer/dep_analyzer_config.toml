@@ -1,0 +1,46 @@
+# Dependency Analyzer Configuration
+# This is the default configuration file for the dependency analyzer tool
+
+[paths]
+# Base directory for all generated artifacts
+output_base_dir = "./generated/artifacts"
+# Path to the SQLite database containing PL/SQL analysis results (if not specified via CLI)
+database_path = "./generated/artifacts/PLSQL_CodeObjects.db"
+
+[logging]
+# Verbosity level for console logging (0=WARNING, 1=INFO, 2=DEBUG, 3=TRACE)
+log_verbose_level = 1
+
+[graph]
+# Default format for saving and loading graphs: "gpickle", "graphml", "gexf", "json"
+default_graph_format = "graphml"
+
+[visualization]
+# Default engine for visualizing graphs: "graphviz" or "pyvis"
+default_visualization_engine = "graphviz"
+# Include package names in node labels by default
+with_package_name_labels = true
+
+# Color mapping for packages in visualizations
+[visualization.package_colors]
+SYS = "lightcoral"
+DBMS_ = "lightblue"
+UTL_ = "lightgreen"
+STANDARD = "lightgoldenrodyellow"
+UNKNOWN = "whitesmoke"
+APP_CORE = "khaki"
+APP_SERVICE = "mediumpurple"
+APP_UTIL = "lightseagreen"
+
+[features]
+# Enable performance profiling
+enable_profiler = false
+
+[analysis]
+# Parameters for node classification
+hub_degree_percentile = 0.95
+hub_betweenness_percentile = 0.95
+hub_pagerank_percentile = 0.95
+utility_out_degree_percentile = 0.90
+utility_max_complexity = 50
+orphan_component_max_size = 4
