@@ -92,13 +92,43 @@ def simple_graph_no_cycles() -> nx.DiGraph:
     E -> F
     """
     graph = nx.DiGraph()
+    
+    # Create mock objects for reference
+    mock_objects = {
+        "A": MockPLSQLCodeObject(name="A", type=CodeObjectType.PROCEDURE),
+        "B": MockPLSQLCodeObject(name="B", type=CodeObjectType.PROCEDURE),
+        "C": MockPLSQLCodeObject(name="C", type=CodeObjectType.FUNCTION),
+        "D": MockPLSQLCodeObject(name="D", type=CodeObjectType.PACKAGE),
+        "E": MockPLSQLCodeObject(name="E", type=CodeObjectType.PROCEDURE),
+        "F": MockPLSQLCodeObject(name="F", type=CodeObjectType.PROCEDURE),
+    }
+    
+    # Add nodes with structure-only attributes (like current GraphConstructor)
     nodes_data = {
-        "A": {"object": MockPLSQLCodeObject(name="A", type=CodeObjectType.PROCEDURE)},
-        "B": {"object": MockPLSQLCodeObject(name="B", type=CodeObjectType.PROCEDURE)},
-        "C": {"object": MockPLSQLCodeObject(name="C", type=CodeObjectType.FUNCTION)},
-        "D": {"object": MockPLSQLCodeObject(name="D", type=CodeObjectType.PACKAGE)},
-        "E": {"object": MockPLSQLCodeObject(name="E", type=CodeObjectType.PROCEDURE)},
-        "F": {"object": MockPLSQLCodeObject(name="F", type=CodeObjectType.PROCEDURE)},
+        "A": {
+            'id': "A", 'name': "A", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value,
+            'overloaded': False, 'object': mock_objects["A"]  # Keep object for tests that need it
+        },
+        "B": {
+            'id': "B", 'name': "B", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value,
+            'overloaded': False, 'object': mock_objects["B"]
+        },
+        "C": {
+            'id': "C", 'name': "C", 'package_name': "", 'type': CodeObjectType.FUNCTION.value,
+            'overloaded': False, 'object': mock_objects["C"]
+        },
+        "D": {
+            'id': "D", 'name': "D", 'package_name': "", 'type': CodeObjectType.PACKAGE.value,
+            'overloaded': False, 'object': mock_objects["D"]
+        },
+        "E": {
+            'id': "E", 'name': "E", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value,
+            'overloaded': False, 'object': mock_objects["E"]
+        },
+        "F": {
+            'id': "F", 'name': "F", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value,
+            'overloaded': False, 'object': mock_objects["F"]
+        },
     }
     for node_id, data in nodes_data.items():
         graph.add_node(node_id, **data)
@@ -119,11 +149,25 @@ def graph_with_cycles() -> nx.DiGraph:
     A -> D (connects the two cycle components)
     """
     graph = nx.DiGraph()
+    
+    # Create mock objects for reference
+    mock_objects = {
+        "A": MockPLSQLCodeObject(name="A"), "B": MockPLSQLCodeObject(name="B"),
+        "C": MockPLSQLCodeObject(name="C"), "D": MockPLSQLCodeObject(name="D"),
+        "E": MockPLSQLCodeObject(name="E"), "F": MockPLSQLCodeObject(name="F"),
+        "G": MockPLSQLCodeObject(name="G"), "H": MockPLSQLCodeObject(name="H"),
+    }
+    
+    # Add nodes with structure-only attributes plus object for backward compatibility
     nodes_data = {
-        "A": {"object": MockPLSQLCodeObject(name="A")}, "B": {"object": MockPLSQLCodeObject(name="B")},
-        "C": {"object": MockPLSQLCodeObject(name="C")}, "D": {"object": MockPLSQLCodeObject(name="D")},
-        "E": {"object": MockPLSQLCodeObject(name="E")}, "F": {"object": MockPLSQLCodeObject(name="F")},
-        "G": {"object": MockPLSQLCodeObject(name="G")}, "H": {"object": MockPLSQLCodeObject(name="H")},
+        "A": {'id': "A", 'name': "A", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["A"]},
+        "B": {'id': "B", 'name': "B", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["B"]},
+        "C": {'id': "C", 'name': "C", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["C"]},
+        "D": {'id': "D", 'name': "D", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["D"]},
+        "E": {'id': "E", 'name': "E", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["E"]},
+        "F": {'id': "F", 'name': "F", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["F"]},
+        "G": {'id': "G", 'name': "G", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["G"]},
+        "H": {'id': "H", 'name': "H", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["H"]},
     }
     for node_id, data in nodes_data.items():
         graph.add_node(node_id, **data)
@@ -145,13 +189,25 @@ def graph_with_placeholders() -> nx.DiGraph:
     P3 (Placeholder, isolated)
     """
     graph = nx.DiGraph()
+    
+    # Create mock objects for reference
+    mock_objects = {
+        "A": MockPLSQLCodeObject(name="A", type=CodeObjectType.PROCEDURE),
+        "P1": MockPLSQLCodeObject(name="P1", type=CodeObjectType.UNKNOWN),
+        "B": MockPLSQLCodeObject(name="B", type=CodeObjectType.PROCEDURE),
+        "X": MockPLSQLCodeObject(name="X", type=CodeObjectType.FUNCTION),
+        "P2": MockPLSQLCodeObject(name="P2", type=CodeObjectType.UNKNOWN),
+        "P3": MockPLSQLCodeObject(name="P3", type=CodeObjectType.UNKNOWN),
+    }
+    
+    # Add nodes with structure-only attributes plus object for backward compatibility
     nodes_data = {
-        "A": {"object": MockPLSQLCodeObject(name="A", type=CodeObjectType.PROCEDURE)},
-        "P1": {"object": MockPLSQLCodeObject(name="P1", type=CodeObjectType.UNKNOWN)},
-        "B": {"object": MockPLSQLCodeObject(name="B", type=CodeObjectType.PROCEDURE)},
-        "X": {"object": MockPLSQLCodeObject(name="X", type=CodeObjectType.FUNCTION)},
-        "P2": {"object": MockPLSQLCodeObject(name="P2", type=CodeObjectType.UNKNOWN)},
-        "P3": {"object": MockPLSQLCodeObject(name="P3", type=CodeObjectType.UNKNOWN)},
+        "A": {'id': "A", 'name': "A", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["A"]},
+        "P1": {'id': "P1", 'name': "P1", 'package_name': "", 'type': CodeObjectType.UNKNOWN.value, 'overloaded': False, 'object': mock_objects["P1"]},
+        "B": {'id': "B", 'name': "B", 'package_name': "", 'type': CodeObjectType.PROCEDURE.value, 'overloaded': False, 'object': mock_objects["B"]},
+        "X": {'id': "X", 'name': "X", 'package_name': "", 'type': CodeObjectType.FUNCTION.value, 'overloaded': False, 'object': mock_objects["X"]},
+        "P2": {'id': "P2", 'name': "P2", 'package_name': "", 'type': CodeObjectType.UNKNOWN.value, 'overloaded': False, 'object': mock_objects["P2"]},
+        "P3": {'id': "P3", 'name': "P3", 'package_name': "", 'type': CodeObjectType.UNKNOWN.value, 'overloaded': False, 'object': mock_objects["P3"]},
     }
     for node_id, data in nodes_data.items():
         graph.add_node(node_id, **data)
@@ -432,7 +488,9 @@ def test_find_terminal_nodes_empty_graph(empty_graph, da_test_logger: lg.Logger)
 def test_find_terminal_nodes_simple_graph_exclude_placeholders(simple_graph_no_cycles, da_test_logger: lg.Logger):
     # C, D, F have out-degree 0
     expected = {"C", "D", "F"}
-    assert find_terminal_nodes(simple_graph_no_cycles, da_test_logger, exclude_placeholders=True) == expected
+    # Create object_map for placeholder exclusion
+    object_map = {node_id: node_data['object'] for node_id, node_data in simple_graph_no_cycles.nodes(data=True)}
+    assert find_terminal_nodes(simple_graph_no_cycles, da_test_logger, exclude_placeholders=True, object_map=object_map) == expected
 
 def test_find_terminal_nodes_with_placeholders_exclude(graph_with_placeholders, da_test_logger: lg.Logger):
     # P1, P2, P3 are UNKNOWN. X calls P2. B calls X. A calls P1.
@@ -440,20 +498,24 @@ def test_find_terminal_nodes_with_placeholders_exclude(graph_with_placeholders, 
     # If excluding placeholders: None are left.
     # B is not terminal (calls X). A is not (calls P1). X is not (calls P2).
     # Correct: P1, P2, P3 are terminals. If excluded, then empty set.
-    assert find_terminal_nodes(graph_with_placeholders, da_test_logger, exclude_placeholders=True) == set()
+    object_map = {node_id: node_data['object'] for node_id, node_data in graph_with_placeholders.nodes(data=True)}
+    assert find_terminal_nodes(graph_with_placeholders, da_test_logger, exclude_placeholders=True, object_map=object_map) == set()
 
 def test_find_terminal_nodes_with_placeholders_include(graph_with_placeholders, da_test_logger: lg.Logger):
     expected = {"P1", "P2", "P3"}
+    # For exclude_placeholders=False, object_map is not needed since we include all terminals
     assert find_terminal_nodes(graph_with_placeholders, da_test_logger, exclude_placeholders=False) == expected
 
 def test_find_terminal_nodes_complex_graph_exclude(complex_graph, da_test_logger: lg.Logger):
     # Terminals: T1, P1, P2, EntryB, Iso
     # Excluding P1, P2 (placeholders)
     expected = {"T1", "EntryB", "Iso"}
-    assert find_terminal_nodes(complex_graph, da_test_logger, exclude_placeholders=True) == expected
+    object_map = {node_id: node_data['object'] for node_id, node_data in complex_graph.nodes(data=True)}
+    assert find_terminal_nodes(complex_graph, da_test_logger, exclude_placeholders=True, object_map=object_map) == expected
 
 def test_find_terminal_nodes_complex_graph_include(complex_graph, da_test_logger: lg.Logger):
     expected = {"T1", "P1", "P2", "EntryB", "Iso"}
+    # For exclude_placeholders=False, object_map is not needed since we include all terminals
     assert find_terminal_nodes(complex_graph, da_test_logger, exclude_placeholders=False) == expected
 
 
@@ -665,7 +727,10 @@ def test_classify_nodes_basic(complex_graph, da_test_logger: lg.Logger):
 
 # 9. calculate_node_complexity_metrics
 def test_calculate_node_complexity_metrics_basic(simple_graph_no_cycles, da_test_logger: lg.Logger):
-    calculate_node_complexity_metrics(simple_graph_no_cycles, da_test_logger)
+    # Create object_map from the graph's objects
+    object_map = {node_id: node_data['object'] for node_id, node_data in simple_graph_no_cycles.nodes(data=True)}
+    
+    calculate_node_complexity_metrics(simple_graph_no_cycles, object_map, da_test_logger)
     for node_id, node_data in simple_graph_no_cycles.nodes(data=True):
         assert 'loc' in node_data
         assert 'num_params' in node_data
@@ -678,11 +743,15 @@ def test_calculate_node_complexity_metrics_basic(simple_graph_no_cycles, da_test
 
 def test_calculate_node_complexity_metrics_edge_cases(empty_graph, da_test_logger: lg.Logger):
     # Should not raise or fail on empty graph
-    calculate_node_complexity_metrics(empty_graph, da_test_logger)
+    object_map = {}
+    calculate_node_complexity_metrics(empty_graph, object_map, da_test_logger)
     assert len(empty_graph.nodes) == 0
 
 def test_calculate_node_complexity_metrics_complex(complex_graph, da_test_logger: lg.Logger):
-    calculate_node_complexity_metrics(complex_graph, da_test_logger)
+    # Create object_map from the graph's objects
+    object_map = {node_id: node_data['object'] for node_id, node_data in complex_graph.nodes(data=True)}
+    
+    calculate_node_complexity_metrics(complex_graph, object_map, da_test_logger)
     for node_id, node_data in complex_graph.nodes(data=True):
         assert 'loc' in node_data
         assert 'num_params' in node_data
@@ -721,7 +790,10 @@ def test_calculate_node_complexity_metrics_specific_values(da_test_logger: lg.Lo
     )
     graph.add_node("TestProcNode", object=mock_node_obj)
 
-    calculate_node_complexity_metrics(graph, da_test_logger)
+    # Create object_map for the test
+    object_map = {"TestProcNode": mock_node_obj}
+    
+    calculate_node_complexity_metrics(graph, object_map, da_test_logger)
     
     node_data = graph.nodes["TestProcNode"]
     assert node_data['loc'] == 10

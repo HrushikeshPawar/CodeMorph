@@ -160,11 +160,11 @@ def test_out_of_scope_call_creates_placeholder(da_test_logger: lg.Logger):
     assert graph.has_node("mypkg.caller")
     assert graph.has_node("external_pkg.non_existent_proc") # Placeholder for qualified
     
-    placeholder_node_data = graph.nodes["external_pkg.non_existent_proc"]['object']
-    assert isinstance(placeholder_node_data, PLSQL_CodeObject)
-    assert placeholder_node_data.name == "non_existent_proc"
-    assert placeholder_node_data.package_name == "external_pkg"
-    assert placeholder_node_data.type == CodeObjectType.UNKNOWN
+    # Check placeholder node attributes in structure-only mode
+    placeholder_node_data = graph.nodes["external_pkg.non_existent_proc"]
+    assert placeholder_node_data['name'] == "non_existent_proc"
+    assert placeholder_node_data['package_name'] == "external_pkg"
+    assert placeholder_node_data['type'] == "UNKNOWN"
 
     assert graph.has_edge("mypkg.caller", "external_pkg.non_existent_proc")
     
@@ -497,7 +497,7 @@ def test_build_graph_out_of_scope_and_placeholder(da_test_logger: lg.Logger):
     assert "unknown_pkg.unknown_proc" in out_of_scope
     assert "local_unknown" in out_of_scope
     assert graph.has_node("unknown_pkg.unknown_proc") # Placeholder created
-    assert graph.nodes["unknown_pkg.unknown_proc"]['object'].type == CodeObjectType.UNKNOWN
+    assert graph.nodes["unknown_pkg.unknown_proc"]['type'] == "UNKNOWN"
     assert graph.has_edge(caller.id, "unknown_pkg.unknown_proc")
     assert not graph.has_node("local_unknown") # No placeholder for unqualified unknown
     da_test_logger.info("Passed: test_build_graph_out_of_scope_and_placeholder")

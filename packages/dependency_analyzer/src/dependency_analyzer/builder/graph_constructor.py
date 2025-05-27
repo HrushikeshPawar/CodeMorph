@@ -269,11 +269,24 @@ class GraphConstructor:
             self.logger.warning(f"Skipped {len(unique_skipped_names)} unique ambiguous/conflicting global call name(s): {unique_skipped_names}")
 
     def _add_nodes_to_graph(self):
-        """Adds all processed PLSQL_CodeObject instances as nodes to the dependency graph."""
-        self.logger.info(f"Adding {len(self.code_objects)} code objects as nodes to the graph.")
+        """Adds all processed PLSQL_CodeObject instances as nodes to the dependency graph with structure-only attributes."""
+        self.logger.info(f"Adding {len(self.code_objects)} code objects as nodes to the graph (structure-only mode).")
         for codeobject in self.code_objects:
             if codeobject.id not in self.dependency_graph.nodes:
-                self.dependency_graph.add_node(codeobject.id, object=codeobject)
+                # Extract only essential attributes for structure-only storage
+                node_attributes = {
+                    'id': codeobject.id,
+                    'name': codeobject.name,
+                    'package_name': codeobject.package_name,
+                    'type': codeobject.type.value if hasattr(codeobject, 'type') else None,
+                    'overloaded': getattr(codeobject, 'overloaded', False),
+                    # Add basic metrics if available
+                    'loc': getattr(codeobject, 'loc', None),
+                    'num_parameters': len(codeobject.parsed_parameters) if hasattr(codeobject, 'parsed_parameters') and codeobject.parsed_parameters else 0,
+                    'num_calls_made': len(set(getattr(call, 'call_name', None) for call in codeobject.extracted_calls if hasattr(call, 'call_name'))) if hasattr(codeobject, 'extracted_calls') and codeobject.extracted_calls else 0
+                }
+                
+                self.dependency_graph.add_node(codeobject.id, **node_attributes)
                 self.logger.trace(f"Added node: {codeobject.id} (Name: {codeobject.name}, Pkg: {codeobject.package_name})")
             else:
                 self.logger.trace(f"Node {codeobject.id} already exists in graph.")
@@ -299,13 +312,23 @@ class GraphConstructor:
             self.logger.warning(f"Attempted to add edge from {source_node_id} to non-existent target node: {target_node_id}. This might indicate an out-of-scope call not yet represented as a placeholder.")
             # Optionally, create a placeholder here if not handled elsewhere
             if target_node_id not in self.dependency_graph:
-                 # Create a minimal PLSQL_CodeObject for this unknown dependency
+                 # Create a minimal placeholder node for this unknown dependency
                 dep_split = target_node_id.split('.') # Assuming target_node_id is a qualified name
                 obj_name = dep_split[-1]
                 pkg_name = ".".join(dep_split[:-1]) if len(dep_split) > 1 else ""
-                placeholder_obj = PLSQL_CodeObject(name=obj_name, package_name=pkg_name, type=CodeObjectType.UNKNOWN)
-                placeholder_obj.id = target_node_id # Explicitly set ID
-                self.dependency_graph.add_node(target_node_id, object=placeholder_obj)
+                
+                # Add node with structure-only attributes
+                self.dependency_graph.add_node(
+                    target_node_id,
+                    id=target_node_id,
+                    name=obj_name,
+                    package_name=pkg_name,
+                    type='UNKNOWN',
+                    overloaded=False,
+                    loc=0,
+                    num_parameters=0,
+                    num_calls_made=0
+                )
                 self.logger.info(f"Created placeholder node for out-of-scope target: {target_node_id}")
                 self.dependency_graph.add_edge(source_node_id, target_node_id)
                 self.logger.trace(f"Added edge to new placeholder: {source_node_id} -> {target_node_id}")
@@ -429,15 +452,18 @@ class GraphConstructor:
                     obj_name_for_placeholder = dep_split[-1]
                     pkg_name_for_placeholder = ".".join(dep_split[:-1]) if len(dep_split) > 1 else ""
                     
-                    # Create a minimal PLSQL_CodeObject for this unknown dependency
-                    placeholder_obj = PLSQL_CodeObject(
-                        name=obj_name_for_placeholder, 
-                        package_name=pkg_name_for_placeholder, 
-                        type=CodeObjectType.UNKNOWN
+                    # Create a placeholder node with structure-only attributes
+                    self.dependency_graph.add_node(
+                        placeholder_id,
+                        id=placeholder_id,
+                        name=obj_name_for_placeholder,
+                        package_name=pkg_name_for_placeholder,
+                        type='UNKNOWN',
+                        overloaded=False,
+                        loc=0,
+                        num_parameters=0,
+                        num_calls_made=0
                     )
-                    placeholder_obj.id = placeholder_id # Explicitly set ID
-                    
-                    self.dependency_graph.add_node(placeholder_id, object=placeholder_obj)
                     self.logger.info(f"Created placeholder node for out-of-scope call: {placeholder_id}")
                 
                 # Add edge to placeholder if it's not a self-reference to a placeholder
@@ -501,13 +527,12 @@ class GraphConstructor:
     def _add_edges_to_graph(self):
         """
         Identifies and adds dependency edges between code objects based on extracted calls.
-        This adapts the main loop of 'create_dependency_graph' from dummy.py.
+        Works with structure-only graph - uses original code_objects list for full object data.
         """
         self.logger.info("Starting to add dependency edges to the graph...")
-        nodes_to_process = list(self.dependency_graph.nodes) # Process a static list of nodes
         
-        for source_node_id in tqdm(nodes_to_process, desc="Building Edges", disable=not self.verbose):
-            source_code_object: PLSQL_CodeObject = self.dependency_graph.nodes[source_node_id]['object']
+        for source_code_object in tqdm(self.code_objects, desc="Building Edges", disable=not self.verbose):
+            source_node_id = source_code_object.id
             self.logger.trace(f"Processing source object for edges: {source_node_id} (Name: {source_code_object.name})")
 
             if not source_code_object.extracted_calls:

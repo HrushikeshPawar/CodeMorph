@@ -89,6 +89,46 @@ def test_graph_with_objects():
     
     return G
 
+@pytest.fixture
+def test_graph_structure_only():
+    """Creates a test graph with structure-only attributes (no objects)"""
+    G = nx.DiGraph()
+    
+    # Add nodes with structure-only attributes (as GraphConstructor would create them)
+    G.add_node("proc1", 
+               id="proc1", 
+               name="procedure1", 
+               package_name="package1",
+               type="PROCEDURE",
+               overloaded=False,
+               loc=10,
+               num_parameters=2,
+               num_calls_made=1)
+    G.add_node("proc2", 
+               id="proc2",
+               name="procedure2", 
+               package_name="package1",
+               type="PROCEDURE", 
+               overloaded=False,
+               loc=15,
+               num_parameters=1,
+               num_calls_made=1)
+    G.add_node("func1", 
+               id="func1",
+               name="function1", 
+               package_name=None,
+               type="FUNCTION",
+               overloaded=False,
+               loc=5,
+               num_parameters=0,
+               num_calls_made=0)
+    
+    # Add edges
+    G.add_edge("proc1", "proc2", weight=1.0)
+    G.add_edge("proc2", "func1", weight=0.5)
+    
+    return G
+
 def test_init(da_test_logger: lg.Logger):
     """Test that GraphStorage initializes correctly"""
     storage = GraphStorage(da_test_logger)
@@ -219,44 +259,75 @@ def test_parent_directory_creation(da_test_logger: lg.Logger, test_graph, temp_d
     assert os.path.exists(file_path)
 
 def test_save_structure_only(da_test_logger, test_graph_with_objects, temp_dir):
-    """Test saving only the structure of a graph with code objects"""
+    """Test saving a graph with code objects using gpickle format"""
     storage = GraphStorage(da_test_logger)
-    file_path = os.path.join(temp_dir, "test_structure.json")
+    file_path = os.path.join(temp_dir, "test_structure.gpickle")
+    
+    # Save graph with objects using gpickle (which can handle objects)
+    result = storage.save_graph(test_graph_with_objects, file_path)
+    assert result is True
+    assert os.path.exists(file_path)
+    
+    # Load the saved graph
+    loaded_graph = storage.load_graph(file_path)
+    assert loaded_graph is not None
+    assert loaded_graph.number_of_nodes() == test_graph_with_objects.number_of_nodes()
+    assert loaded_graph.number_of_edges() == test_graph_with_objects.number_of_edges()
+    
+    # Verify the basic structure is preserved
+    for node_id in loaded_graph.nodes():
+        assert node_id in test_graph_with_objects.nodes
+        # With gpickle, objects should be preserved
+        assert 'object' in loaded_graph.nodes[node_id]
+
+def test_save_load_structure_only_graph(da_test_logger, test_graph_structure_only, temp_dir):
+    """Test saving and loading a true structure-only graph"""
+    storage = GraphStorage(da_test_logger)
+    file_path = os.path.join(temp_dir, "test_structure_only.json")
     
     # Save structure-only graph
-    result = storage.save_graph(test_graph_with_objects, file_path)
+    result = storage.save_graph(test_graph_structure_only, file_path)
     assert result is True
     assert os.path.exists(file_path)
     
     # Load the saved structure
     loaded_graph = storage.load_graph(file_path)
     assert loaded_graph is not None
-    assert loaded_graph.number_of_nodes() == test_graph_with_objects.number_of_nodes()
-    assert loaded_graph.number_of_edges() == test_graph_with_objects.number_of_edges()
+    assert loaded_graph.number_of_nodes() == test_graph_structure_only.number_of_nodes()
+    assert loaded_graph.number_of_edges() == test_graph_structure_only.number_of_edges()
     
-    # Verify code objects are not present, but their basic attributes are
+    # Verify structure-only attributes are preserved
     for node_id in loaded_graph.nodes():
-        assert 'object' not in loaded_graph.nodes[node_id]
-        assert 'object_id' in loaded_graph.nodes[node_id]
-        assert loaded_graph.nodes[node_id]['object_id'] == node_id
+        node_data = loaded_graph.nodes[node_id]
+        original_data = test_graph_structure_only.nodes[node_id]
+        
+        # Verify no object attribute (structure-only)
+        assert 'object' not in node_data
+        
+        # Verify essential attributes are preserved
+        assert node_data['name'] == original_data['name']
+        assert node_data['package_name'] == original_data['package_name']
+        assert node_data['type'] == original_data['type']
+        assert node_data['overloaded'] == original_data['overloaded']
 
-def test_load_and_populate(da_test_logger, test_graph_with_objects, mock_database_loader, temp_dir):
-    """Test loading a structure-only graph and populating it with code objects"""
+def test_rehydrate_graph_with_objects(da_test_logger, test_graph_structure_only, mock_database_loader, temp_dir):
+    """Test rehydrating a structure-only graph with code objects"""
     storage = GraphStorage(da_test_logger)
-    file_path = os.path.join(temp_dir, "test_structure.json")
     
-    # First save structure-only graph
-    storage.save_graph(test_graph_with_objects, file_path)
+    # Create object map from mock database loader
+    code_objects = mock_database_loader.load_all_objects()
+    object_map = {obj.id: obj for obj in code_objects}
     
-    # Load and populate with objects from mock database loader
-    populated_graph = storage.load_and_populate(file_path, mock_database_loader)
+    # Rehydrate the structure-only graph
+    rehydrated_graph = storage.rehydrate_graph_with_objects(test_graph_structure_only, object_map)
     
-    assert populated_graph is not None
-    assert populated_graph.number_of_nodes() == test_graph_with_objects.number_of_nodes()
-    assert populated_graph.number_of_edges() == test_graph_with_objects.number_of_edges()
+    assert rehydrated_graph is not None
+    assert rehydrated_graph.number_of_nodes() == test_graph_structure_only.number_of_nodes()
+    assert rehydrated_graph.number_of_edges() == test_graph_structure_only.number_of_edges()
     
-    # Verify code objects are present now
-    for node_id in populated_graph.nodes():
-        assert 'object' in populated_graph.nodes[node_id]
-        assert hasattr(populated_graph.nodes[node_id]['object'], 'id')
-        assert populated_graph.nodes[node_id]['object'].id == node_id
+    # Verify code objects are present now for nodes that have matching objects
+    for node_id in rehydrated_graph.nodes():
+        if node_id in object_map:
+            assert 'object' in rehydrated_graph.nodes[node_id]
+            assert hasattr(rehydrated_graph.nodes[node_id]['object'], 'id')
+            assert rehydrated_graph.nodes[node_id]['object'].id == node_id

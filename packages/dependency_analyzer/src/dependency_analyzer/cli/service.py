@@ -144,7 +144,9 @@ class CLIService:
         
         # Calculate complexity if requested
         if calculate_complexity or self.settings.calculate_complexity_metrics:
-            dependency_graph = analyzer.calculate_node_complexity_metrics(dependency_graph, self.logger)
+            # Create object_map from loaded objects
+            object_map = {obj.id: obj for obj in code_objects}
+            dependency_graph = analyzer.calculate_node_complexity_metrics(dependency_graph, object_map, self.logger)
             self.logger.info("Complexity metrics calculated")
         
         # Save graph
@@ -307,8 +309,16 @@ class CLIService:
                 )
             )
         
+        # Load objects from database to create object_map
+        with self.database_manager() as db_manager:
+            loader = DatabaseLoader(db_manager, self.logger)
+            code_objects = loader.load_all_objects()
+        
+        # Create object_map from loaded objects
+        object_map = {obj.id: obj for obj in code_objects}
+        
         # Calculate metrics
-        updated_graph = analyzer.calculate_node_complexity_metrics(graph, self.logger)
+        updated_graph = analyzer.calculate_node_complexity_metrics(graph, object_map, self.logger)
         
         # Save updated graph
         if self.graph_storage.save_graph(updated_graph, graph_path, format=graph_format):

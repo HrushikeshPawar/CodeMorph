@@ -74,6 +74,13 @@ def test_build_full_with_config(mocker):
     test_graph = nx.DiGraph()
     test_graph.add_node("test")
     
+    # Create a mock PLSQL_CodeObject 
+    class MockCodeObject:
+        def __init__(self, id: str):
+            self.id = id
+    
+    mock_objects = [MockCodeObject("obj1")]
+    
     # Setup mocks
     mock_constructor = mocker.patch("dependency_analyzer.cli.service.GraphConstructor")
     mock_constructor_instance = mock_constructor.return_value
@@ -81,12 +88,16 @@ def test_build_full_with_config(mocker):
     
     mock_loader = mocker.patch("dependency_analyzer.cli.service.DatabaseLoader")
     mock_loader_instance = mock_loader.return_value
-    mock_loader_instance.load_all_objects.return_value = ["obj1"]
+    mock_loader_instance.load_all_objects.return_value = mock_objects
     
     mock_db_manager = mocker.patch("dependency_analyzer.cli.service.DatabaseManager")
     
     mock_graph_storage = mocker.patch("dependency_analyzer.cli.service.GraphStorage")
     mock_storage_instance = mock_graph_storage.return_value
+    
+    # Mock the analyzer function 
+    mock_analyzer = mocker.patch("dependency_analyzer.cli.service.analyzer")
+    mock_analyzer.calculate_node_complexity_metrics.return_value = test_graph
     
     # Create a temporary directory for the test
     with tempfile.TemporaryDirectory() as tmpdir:

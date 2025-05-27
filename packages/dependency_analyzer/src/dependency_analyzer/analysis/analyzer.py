@@ -233,7 +233,12 @@ def find_entry_points(graph: nx.DiGraph, logger: lg.Logger) -> Set[str]:
     logger.info(f"Identified {len(entry_points)} potential entry points: {entry_points if entry_points else 'None'}")
     return entry_points
 
-def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholders: bool = True) -> Set[str]:
+def find_terminal_nodes(
+    graph: nx.DiGraph, 
+    logger: lg.Logger, 
+    exclude_placeholders: bool = True,
+    object_map: Optional[Dict[str, object]] = None
+) -> Set[str]:
     """
     Identifies terminal nodes in the graph (nodes with an out-degree of 0).
     These are objects that do not call any other objects within the analyzed set,
@@ -245,6 +250,8 @@ def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholde
         exclude_placeholders: If True, attempts to filter out nodes that are
                               placeholders for out-of-scope calls (typically of
                               type CodeObjectType.UNKNOWN).
+        object_map: Optional dictionary mapping node IDs to PLSQL_CodeObject instances.
+                   Required if exclude_placeholders=True for structure-only graphs.
 
     Returns:
         A set of node IDs that are terminal nodes.
@@ -255,17 +262,28 @@ def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholde
         return set()
 
     terminal_nodes: Set[str] = set()
-    for node_id, node_data in graph.nodes(data=True):
+    for node_id in graph.nodes():
         if graph.out_degree(node_id) == 0:
             if exclude_placeholders:
-                # Access the 'object' attribute which should be a PLSQL_CodeObject instance
-                code_object_instance = node_data.get('object')
-                if code_object_instance and hasattr(code_object_instance, 'type'):
-                    if code_object_instance.type == CodeObjectType.UNKNOWN:
+                # For structure-only graphs, we need to check the type attribute directly or use object_map
+                node_data = graph.nodes[node_id]
+                node_type = node_data.get('type')
+                
+                # If type is available directly in node attributes (structure-only)
+                if node_type is not None:
+                    if (isinstance(node_type, str) and node_type.upper() == 'UNKNOWN') or \
+                       (hasattr(node_type, 'name') and node_type.name == 'UNKNOWN') or \
+                       (node_type == CodeObjectType.UNKNOWN):
+                        logger.trace(f"Node '{node_id}' has out-degree 0 but is an UNKNOWN type placeholder. Excluding.")
+                        continue # Skip this placeholder node
+                # If object_map is provided, check the object type
+                elif object_map and node_id in object_map:
+                    code_object_instance = object_map[node_id]
+                    if hasattr(code_object_instance, 'type') and code_object_instance.type == CodeObjectType.UNKNOWN:
                         logger.trace(f"Node '{node_id}' has out-degree 0 but is an UNKNOWN type placeholder. Excluding.")
                         continue # Skip this placeholder node
                 else:
-                    logger.warning(f"Node '{node_id}' has out-degree 0, but its 'object' attribute or 'type' is missing. Cannot determine if placeholder. Including by default.")
+                    logger.warning(f"Node '{node_id}' has out-degree 0, but type information is not available. Cannot determine if placeholder. Including by default.")
             
             terminal_nodes.add(node_id)
             logger.trace(f"Node '{node_id}' has out-degree 0, marking as terminal.")
@@ -410,7 +428,11 @@ def get_connected_components(
         logger.error(f"Error finding {component_type} connected components: {e}", exc_info=True)
         return []
 
-def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> nx.DiGraph:
+def calculate_node_complexity_metrics(
+    graph: nx.DiGraph, 
+    object_map: Dict[str, object], 
+    logger: lg.Logger
+) -> nx.DiGraph:
     """
     Calculates and stores complexity metrics for each PLSQL_CodeObject node in the graph.
     Metrics:
@@ -419,10 +441,18 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> n
         - num_calls_made: Number of outgoing calls (unique callees in extracted_calls)
         - acc: Approximate Cyclomatic Complexity (heuristic based on control flow keywords)
     Stores metrics as node attributes: 'loc', 'num_params', 'num_calls_made', 'acc'.
+    
+    Args:
+        graph: The structure-only NetworkX DiGraph.
+        object_map: Dictionary mapping node IDs to PLSQL_CodeObject instances.
+        logger: Logger instance for logging operations.
+        
+    Returns:
+        The graph with complexity metrics added as node attributes.
     """
     if not graph:
         logger.warning("Graph is empty or None. Cannot calculate complexity metrics.")
-        return
+        return graph
 
     # Decision-point keywords for ACC (case-insensitive, word boundaries)
     # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
@@ -431,18 +461,21 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> n
     keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
     acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
 
-    def is_false_positive(match):
+    def is_false_positive(match, clean_code):
         # Get up to 10 chars before the match
         start = match.start()
-        before = obj.clean_code[max(0, start-10):start].lower()
+        before = clean_code[max(0, start-10):start].lower()
         # Check for 'end' followed by whitespace right before the keyword
         return bool(re.search(r'end\s*$', before))
 
-    for node_id, node_data in graph.nodes(data=True):
-        obj = node_data.get('object')
+    logger.info(f"Calculating complexity metrics for {graph.number_of_nodes()} nodes...")
+    
+    for node_id in graph.nodes():
+        obj = object_map.get(node_id)
         if obj is None:
-            logger.warning(f"Node '{node_id}' missing 'object' attribute. Skipping complexity metrics.")
+            logger.warning(f"Node '{node_id}' not found in object_map. Skipping complexity metrics.")
             continue
+        
         # LOC
         loc = len(obj.clean_code.splitlines()) if obj.clean_code else 0
         # Number of parameters
@@ -456,7 +489,7 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> n
         # Approximate Cyclomatic Complexity (ACC)
         if obj.clean_code:
             matches = list(acc_pattern.finditer(obj.clean_code))
-            acc_count = sum(1 for m in matches if not is_false_positive(m))
+            acc_count = sum(1 for m in matches if not is_false_positive(m, obj.clean_code))
             acc = acc_count + 1
         else:
             acc = 1
