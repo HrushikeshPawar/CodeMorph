@@ -599,3 +599,30 @@ def test_build_graph_complex_overload_resolution(da_test_logger: lg.Logger):
     expected_oos_entry = f"app.util.process_data (overloaded, resolution_failed: {failed_call_detail_str})"
     assert any(expected_oos_entry in item for item in out_of_scope), f"Expected failed overload not in out_of_scope. Got: {out_of_scope}"
     da_test_logger.info("Passed: test_build_graph_complex_overload_resolution")
+
+# In test_graph_constructor.py
+def test_global_suffix_match_resolution(da_test_logger: lg.Logger):
+    """
+    Test that a call using an abbreviated FQN suffix can be resolved globally.
+    e.g., call 'sub_pkg.proc' resolves to 'main_pkg.sub_pkg.proc'.
+    """
+    target_obj = MockPLSQLCodeObject(
+        name="proc", 
+        package_name="main_pkg.sub_pkg", 
+        type=CodeObjectType.PROCEDURE, 
+        id="main_pkg.sub_pkg.proc"
+    )
+    caller_obj = MockPLSQLCodeObject(
+        name="caller", 
+        package_name="another_pkg", 
+        type=CodeObjectType.PROCEDURE, 
+        id="another_pkg.caller"
+    )
+    caller_obj.add_call("sub_pkg.proc") # Call using suffix
+
+    constructor = GraphConstructor(code_objects=[target_obj, caller_obj], logger=da_test_logger)
+    graph, out_of_scope = constructor.build_graph()
+
+    assert not out_of_scope, f"Suffix match resolution failed, out_of_scope: {out_of_scope}"
+    assert graph.has_edge(caller_obj.id, target_obj.id)
+    da_test_logger.info("Passed: test_global_suffix_match_resolution")
