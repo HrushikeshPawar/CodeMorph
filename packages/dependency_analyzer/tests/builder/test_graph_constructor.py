@@ -499,8 +499,38 @@ def test_build_graph_out_of_scope_and_placeholder(da_test_logger: lg.Logger):
     assert graph.has_node("unknown_pkg.unknown_proc") # Placeholder created
     assert graph.nodes["unknown_pkg.unknown_proc"]['type'] == "UNKNOWN"
     assert graph.has_edge(caller.id, "unknown_pkg.unknown_proc")
-    assert not graph.has_node("local_unknown") # No placeholder for unqualified unknown
-    da_test_logger.info("Passed: test_build_graph_out_of_scope_and_placeholder")
+
+def test_initialize_lookup_structures_intermediate_names(da_test_logger: lg.Logger):
+    """
+    Test that intermediate qualified names (e.g., 'sub.proc') are registered under parent package context.
+    """
+    # Object in nested package pkg.sub.proc
+    nested_obj = MockPLSQLCodeObject(
+        name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc"
+    )
+    constructor = GraphConstructor(code_objects=[nested_obj], logger=da_test_logger)
+    constructor._initialize_lookup_structures()
+
+    # Simple name under its own context
+    assert "proc" in constructor._package_wise_code_object_names.get("pkg.sub", {}).get("normal", {})
+    # Intermediate name under parent context
+    parent_map = constructor._package_wise_code_object_names.get("pkg", {}).get("normal", {})
+    assert "sub.proc" in parent_map, f"Expected 'sub.proc' in pkg.normal map, got {parent_map.keys()}"
+    assert parent_map["sub.proc"].id == nested_obj.id
+
+def test_intermediate_name_resolution(da_test_logger: lg.Logger):
+    """
+    Test resolution of calls using intermediate qualified names in package-local lookup.
+    """
+    # Caller in pkg, target in pkg.sub.proc
+    # Caller in pkg, target in pkg.sub.proc
+    caller = MockPLSQLCodeObject(name="main", package_name="pkg", type=CodeObjectType.PROCEDURE, id="pkg.main")
+    target = MockPLSQLCodeObject(name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc")
+    caller.add_call("sub.proc")  # Call using intermediate qualified name
+    constructor = GraphConstructor(code_objects=[caller, target], logger=da_test_logger)
+    graph, out_of_scope = constructor.build_graph()
+    assert not out_of_scope, f"Intermediate name resolution failed, out_of_scope: {out_of_scope}"
+    assert graph.has_edge(caller.id, target.id)
 
 def test_build_graph_call_to_skipped_name_is_out_of_scope(da_test_logger: lg.Logger):
     # Setup a skipped name

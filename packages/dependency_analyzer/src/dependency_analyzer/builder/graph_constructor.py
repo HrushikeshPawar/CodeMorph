@@ -164,16 +164,11 @@ class GraphConstructor:
             current_package_context = codeobject.package_name if codeobject.package_name else "" # Use empty string for None package
             object_simple_name = codeobject.name
 
+            # Determine package_name for potential intermediate names (unused for strict global strategy)
             package_name_parts = current_package_context.split('.') if current_package_context else []
-            if len(package_name_parts) == 2:
-                _, package_name = package_name_parts
-            else:
-                _ = current_package_context
-                package_name = None
-            
 
             # Ensure package context exists in the package-wise map
-            # 1. Register in package-wise structure (always uses simple_name within its package context)
+            # 1. Register in package-wise structure (always uses simple_name within its direct package context)
             if current_package_context not in self._package_wise_code_object_names:
                 self._package_wise_code_object_names[current_package_context] = {
                     "normal": {},
@@ -182,43 +177,52 @@ class GraphConstructor:
                 self.logger.trace(f"Created new entry for package context: '{current_package_context}'")
 
             if codeobject.overloaded:
+                # Register in package-local overloaded map (simple names only)
                 self._package_wise_code_object_names[current_package_context]["overloaded"].setdefault(object_simple_name, set()).add(codeobject)
                 self.logger.trace(f"Registered package-wise (overloaded): '{current_package_context}'.'{object_simple_name}' for {codeobject.id}")
 
-                if package_name:
-                    # If the package name is present, we can also register it in the global overloaded map
-                    # This allows for package-local resolution of overloaded calls
-                    self._overloaded_code_object_call_names.setdefault(f"{package_name}.{object_simple_name}", set()).add(codeobject)
-                    self.logger.trace(f"Registered globally (overloaded): '{package_name}.{object_simple_name}' for {codeobject.id}")
-
             else: # Not overloaded
+                # Register in package-local normal map (simple names only)
                 if object_simple_name in self._package_wise_code_object_names[current_package_context]["normal"]:
                     existing_pkg_obj = self._package_wise_code_object_names[current_package_context]["normal"][object_simple_name]
-                    if existing_pkg_obj.id != codeobject.id: # Should ideally not happen if IDs are unique
+                    if existing_pkg_obj.id != codeobject.id:
                         self.logger.warning(
                             f"Ambiguous non-overloaded name '{object_simple_name}' in package '{current_package_context}'. "
                             f"Existing ID: {existing_pkg_obj.id}, New ID: {codeobject.id}. Overwriting with new one for package-local resolution."
-                        ) # This overwrite is the current behavior for package-local conflicts.
-
+                        )
                 self._package_wise_code_object_names[current_package_context]["normal"][object_simple_name] = codeobject
                 self.logger.trace(f"Registered package-wise (normal): '{current_package_context}'.'{object_simple_name}' for {codeobject.id}")
 
-                if package_name:
-                    # If the package name is present, we can also register it in the global normal map
-                    # This allows for package-local resolution of non-overloaded calls
-                    self._code_object_call_names[f"{package_name}.{object_simple_name}"] = codeobject
-                    self.logger.trace(f"Registered globally (normal): '{package_name}.{object_simple_name}' for {codeobject.id}")
+            # 1.a Register intermediate qualified names under parent package context
+            # e.g., for package "pkg.sub" and object "proc", map "sub.proc" under "pkg"
+            if package_name_parts and len(package_name_parts) >= 2:
+                parent_context = package_name_parts[0]
+                intermediate_name = ".".join(package_name_parts[1:] + [object_simple_name])
+                # Ensure parent context exists
+                if parent_context not in self._package_wise_code_object_names:
+                    self._package_wise_code_object_names[parent_context] = {"normal": {}, "overloaded": {}}
+                if codeobject.overloaded:
+                    self._package_wise_code_object_names[parent_context]["overloaded"].setdefault(intermediate_name, set()).add(codeobject)
+                    self.logger.trace(f"Registered package-wise intermediate (overloaded): '{parent_context}'.'{intermediate_name}' for {codeobject.id}")
+                else:
+                    # Overwrite or warn if conflict
+                    if intermediate_name in self._package_wise_code_object_names[parent_context]["normal"]:
+                        existing = self._package_wise_code_object_names[parent_context]["normal"][intermediate_name]
+                        if existing.id != codeobject.id:
+                            self.logger.warning(
+                                f"Ambiguous intermediate name '{intermediate_name}' in package '{parent_context}'. "
+                                f"Existing ID: {existing.id}, New ID: {codeobject.id}. Overwriting."
+                            )
+                    self._package_wise_code_object_names[parent_context]["normal"][intermediate_name] = codeobject
+                    self.logger.trace(f"Registered package-wise intermediate (normal): '{parent_context}'.'{intermediate_name}' for {codeobject.id}")
 
 
-            # 2. Register globally (fully qualified names, intermediate names, and simple names for truly global objects)
-            package_name_parts = current_package_context.split('.') if current_package_context else []
-            for i in range(len(package_name_parts) + 1):
-                prefix_parts = package_name_parts[i:]
-                call_name_prefix = ".".join(filter(None, prefix_parts))
-                
-                code_object_call_name = f"{call_name_prefix}.{object_simple_name}" if call_name_prefix else object_simple_name
-                
-                self._register_globally(code_object_call_name, codeobject)
+            # 2. Register globally (strict global strategy: only FQN for packaged, simple name for global objects)
+            if current_package_context:
+                fq_name = f"{current_package_context}.{object_simple_name}"
+                self._register_globally(fq_name, codeobject)
+            else:
+                self._register_globally(object_simple_name, codeobject)
 
         # 3. Validate _overloaded_code_object_call_names to ensure sets have >= 2 objects
         self.logger.debug("Validating global overloaded map for true overloads (>= 2 objects per call name).")
@@ -394,6 +398,15 @@ class GraphConstructor:
             if potential_fqn in self._code_object_call_names:
                 resolved_object = self._code_object_call_names[potential_fqn]
                 self.logger.trace(f"Call '{dep_call_name}' (from '{current_pkg_context}') resolved by constructing FQN '{potential_fqn}' via global normal map to: {resolved_object.id}")
+
+        # 1.4 Try abbreviated FQN suffix match (e.g. 'logger_pkg.log_error' -> 'schema_util_common.logger_pkg.log_error')
+        if not resolved_object and '.' in dep_call_name:
+            suffix = f".{dep_call_name}"
+            suffix_matches = [(name, obj) for name, obj in self._code_object_call_names.items() if name.endswith(suffix)]
+            if len(suffix_matches) == 1:
+                _, obj = suffix_matches[0]
+                resolved_object = obj
+                self.logger.trace(f"Call '{dep_call_name}' resolved via global suffix match to: {resolved_object.id}")
 
         if resolved_object:
             target_node_id = resolved_object.id
