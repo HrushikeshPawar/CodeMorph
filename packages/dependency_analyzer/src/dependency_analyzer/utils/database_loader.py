@@ -119,7 +119,10 @@ if __name__ == "__main__":
 
     # 2. DatabaseManager (from plsql_analyzer)
     # Ensure database_path in settings points to your plsql_analyzer.db
-    if not settings.database_path or not settings.database_path.exists():
+    if settings.database_path is None:
+        example_logger.error("Database path is not configured. Please set 'database_path' in the settings.")
+        example_logger.error("Ensure the database file exists and is correctly specified in the configuration.")
+    elif not settings.database_path.exists():
         example_logger.error(f"Database file not found at: {settings.database_path}")
         example_logger.error("Please ensure plsql_analyzer has run and created the database, or update database_path in settings.")
     else:
