@@ -94,34 +94,36 @@ if __name__ == "__main__":
 
     # --- Setup for example ---
     from pathlib import Path
-    # Assuming this script is in packages/dependency_analyzer/src/dependency_analyzer/loader/
-    # Adjust path to config and logging_setup accordingly
+    import sys
+    
+    # Assuming this script is in packages/dependency_analyzer/src/dependency_analyzer/utils/
+    # Adjust path accordingly
     project_root_example = Path(__file__).resolve().parent.parent.parent.parent.parent
     
     # Add project root to sys.path to allow finding other packages
-    import sys
     if str(project_root_example) not in sys.path:
         sys.path.insert(0, str(project_root_example))
 
     try:
-        from dependency_analyzer import config as da_config
+        from dependency_analyzer.settings import DependencyAnalyzerSettings
         from dependency_analyzer.utils.logging_setup import configure_logger as da_configure_logger
     except ImportError:
-        print("Could not import dependency_analyzer config/logging. Ensure PYTHONPATH is set or run from project root.")
+        print("Could not import dependency_analyzer settings/logging. Ensure PYTHONPATH is set or run from project root.")
         sys.exit(1)
 
-    # 1. Configure Logger
-    da_config.ensure_artifact_dirs() # Ensure log directory exists
-    example_logger = da_configure_logger(da_config.LOG_VERBOSE_LEVEL, da_config.LOGS_DIR)
+    # 1. Load settings and configure logger
+    settings = DependencyAnalyzerSettings()
+    settings.ensure_artifact_dirs()  # Ensure log directory exists
+    example_logger = da_configure_logger(settings.log_verbose_level, settings.logs_dir)
     example_logger.info("--- DatabaseLoader Example ---")
 
     # 2. DatabaseManager (from plsql_analyzer)
-    # Ensure DATABASE_PATH in da_config points to your plsql_analyzer.db
-    if not da_config.DATABASE_PATH.exists():
-        example_logger.error(f"Database file not found at: {da_config.DATABASE_PATH}")
-        example_logger.error("Please ensure plsql_analyzer has run and created the database, or update DATABASE_PATH in config.")
+    # Ensure database_path in settings points to your plsql_analyzer.db
+    if not settings.database_path or not settings.database_path.exists():
+        example_logger.error(f"Database file not found at: {settings.database_path}")
+        example_logger.error("Please ensure plsql_analyzer has run and created the database, or update database_path in settings.")
     else:
-        example_db_manager = DatabaseManager(da_config.DATABASE_PATH, example_logger)
+        example_db_manager = DatabaseManager(settings.database_path, example_logger)
 
         # 3. Initialize DatabaseLoader
         loader = DatabaseLoader(example_db_manager, example_logger)
