@@ -549,7 +549,7 @@ def test_intermediate_name_resolution(da_test_logger: lg.Logger):
     Test resolution of calls using intermediate qualified names in package-local lookup.
     """
     # Caller in pkg, target in pkg.sub.proc
-    # Caller in pkg, target in pkg.sub.proc
+    
     caller = MockPLSQLCodeObject(name="main", package_name="pkg", type=CodeObjectType.PROCEDURE, id="pkg.main")
     target = MockPLSQLCodeObject(name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc")
     caller.add_call("sub.proc")  # Call using intermediate qualified name
