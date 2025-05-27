@@ -463,15 +463,22 @@ class GraphConstructor:
             self._add_new_edge(source_node_id, target_node_id)
         elif not an_overload_resolution_path_was_attempted or \
              (an_overload_resolution_path_was_attempted and not candidate_objects_for_overload):
-            # This covers:
-            # 1. The call name was not found in any normal map (target_node_id is None) AND
-            #    it was also not found in any overload map (an_overload_resolution_path_was_attempted is True but candidate_objects_for_overload is None).
-            # 2. The call name was not found in any normal map AND it was not even attempted as an overload because the name didn't appear in overload maps
-            #    (an_overload_resolution_path_was_attempted would be False if we restructured logic, but with current flow, it's simpler).
-            # Essentially, if we are here, no successful resolution (normal or overloaded) occurred and no candidates for overload were even found.
-            
-            self.logger.debug(f"Call '{dep_call_name}' from {source_node_id} is out of scope (not found in any lookup structure or no overload candidates identified). Adding to out_of_scope_calls.")
-            self.out_of_scope_calls.add(dep_call_name)
+            # Handle out-of-scope calls: differentiate ambiguous globals vs genuinely unknown
+            if dep_call_name in self._skip_call_names:
+                # Ambiguous global definition skipped during registration
+                self.logger.debug(
+                    f"Call '{dep_call_name}' from {source_node_id} is out of scope due to ambiguous global definition."
+                    " Adding to out_of_scope_calls with reason ambiguous_global_definition."
+                )
+                self.out_of_scope_calls.add(dep_call_name)
+            else:
+                # Genuine unresolved call
+                self.logger.debug(
+                    f"Call '{dep_call_name}' from {source_node_id} is out of scope "
+                    f"(not found in any lookup structure or no overload candidates identified)."
+                    " Adding to out_of_scope_calls."
+                )
+                self.out_of_scope_calls.add(dep_call_name)
             
             # Create a placeholder node for this out-of-scope call if it looks like a qualified name
             # This helps visualize unresolved dependencies to potentially known external entities.

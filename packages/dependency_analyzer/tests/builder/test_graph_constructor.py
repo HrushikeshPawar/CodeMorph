@@ -413,7 +413,7 @@ def test_call_to_skipped_name(da_test_logger: lg.Logger):
     assert "global_dup" in constructor._skip_call_names # Ensure it was skipped
     assert not graph.has_edge("any_pkg.caller_of_dup", "global_dup_1")
     assert not graph.has_edge("any_pkg.caller_of_dup", "global_dup_2")
-    # The call 'global_dup' from caller_of_dup should be in out_of_scope because 'global_dup' is ambiguous
+    # The call 'global_dup' from caller_of_dup should be in out_of_scope with reason for ambiguous global definition
     assert "global_dup" in out_of_scope
 
 def test_skip_ambiguous_intermediate_names_and_resolution(da_test_logger: lg.Logger):
