@@ -166,7 +166,7 @@ class GraphConstructor:
             current_package_context = codeobject.package_name if codeobject.package_name else "" # Use empty string for None package
             object_simple_name = codeobject.name
 
-            # Determine package_name for potential intermediate names (unused for strict global strategy)
+            # Determine package_name_parts to register intermediate names and drive parent-context mapping.
             package_name_parts = current_package_context.split('.') if current_package_context else []
 
             # Ensure package context exists in the package-wise map
