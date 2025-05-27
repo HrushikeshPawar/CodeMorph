@@ -39,7 +39,8 @@ class GraphConstructor:
         self.verbose: bool = verbose # Verbose flag can be used for conditional tqdm or specific debug logs
 
         self.dependency_graph: nx.DiGraph = nx.DiGraph()
-        self.out_of_scope_calls: Set[str] = set()
+        # Map unresolved call name to reason (e.g., 'ambiguous_global_definition', 'unknown', ...)
+        self.out_of_scope_calls: Dict[str, str] = {}
 
         # Internal lookup structures, populated by _initialize_lookup_structures
         # Maps a globally resolvable call name to a single PLSQL_CodeObject (non-overloaded)
@@ -463,22 +464,21 @@ class GraphConstructor:
             self._add_new_edge(source_node_id, target_node_id)
         elif not an_overload_resolution_path_was_attempted or \
              (an_overload_resolution_path_was_attempted and not candidate_objects_for_overload):
-            # Handle out-of-scope calls: differentiate ambiguous globals vs genuinely unknown
+            # Handle out-of-scope calls: differentiate ambiguous globals vs genuinely not_found
             if dep_call_name in self._skip_call_names:
-                # Ambiguous global definition skipped during registration
+                reason = "ambiguous_global_definition"
                 self.logger.debug(
                     f"Call '{dep_call_name}' from {source_node_id} is out of scope due to ambiguous global definition."
-                    " Adding to out_of_scope_calls with reason ambiguous_global_definition."
+                    " Marking with reason '{reason}'."
                 )
-                self.out_of_scope_calls.add(dep_call_name)
             else:
-                # Genuine unresolved call
+                reason = "not_found"
                 self.logger.debug(
-                    f"Call '{dep_call_name}' from {source_node_id} is out of scope "
-                    f"(not found in any lookup structure or no overload candidates identified)."
-                    " Adding to out_of_scope_calls."
+                    f"Call '{dep_call_name}' from {source_node_id} is out of scope (not found)."
+                    " Marking with reason '{reason}'."
                 )
-                self.out_of_scope_calls.add(dep_call_name)
+            # record reason mapping
+            self.out_of_scope_calls[dep_call_name] = reason
             
             # Create a placeholder node for this out-of-scope call if it looks like a qualified name
             # This helps visualize unresolved dependencies to potentially known external entities.
@@ -528,8 +528,11 @@ class GraphConstructor:
         #     return
 
         if source_code_object.clean_code is None:
-            self.logger.warning(f"Source code for {source_code_object.id} is None. Cannot extract parameters for call '{dep_call_name}'.")
-            self.out_of_scope_calls.add(f"\"{dep_call_name} (overloaded, source_unavailable)\"")
+            self.logger.warning(
+                f"Source code for {source_code_object.id} is None. Cannot extract parameters for overloaded call '{dep_call_name}'."
+            )
+            # mark reason
+            self.out_of_scope_calls[dep_call_name] = "overloaded_source_unavailable"
             return
 
 
@@ -542,8 +545,10 @@ class GraphConstructor:
         # }
 
         if not candidate_objects:
-            self.logger.trace(f"No valid candidates for overloaded call '{dep_call_name}' after filtering self-reference.")
-            self.out_of_scope_calls.add(f"{dep_call_name} (overloaded, no_candidates)")
+            self.logger.trace(
+                f"No valid candidates for overloaded call '{dep_call_name}' after filtering self-reference."
+            )
+            self.out_of_scope_calls[dep_call_name] = "overloaded_no_candidates"
             return
 
         try:
@@ -555,11 +560,17 @@ class GraphConstructor:
                 self.logger.info(f"Overloaded call '{dep_call_name}' (params: \"{extracted_call}\") resolved to ID: {resolved_target_id}")
                 self._add_new_edge(source_code_object.id, resolved_target_id)
             else:
-                self.logger.warning(f"Could not resolve overloaded call '{dep_call_name}' (params: \"{extracted_call}\") from {source_code_object.id}. No matching signature found among candidates.")
-                self.out_of_scope_calls.add(f"{dep_call_name} (overloaded, resolution_failed: {extracted_call})")
+                self.logger.warning(
+                    f"Could not resolve overloaded call '{dep_call_name}' (params: \"{extracted_call}\") from {source_code_object.id}. No matching signature found among candidates."
+                )
+                # record failure reason including params
+                self.out_of_scope_calls[dep_call_name] = f"overloaded_resolution_failed: {extracted_call}"
         except Exception as e:
-            self.logger.error(f"Exception during overload resolution for '{dep_call_name}' (params: \"{extracted_call}\") from {source_code_object.id}: {e}", exc_info=True)
-            self.out_of_scope_calls.add(f"{dep_call_name} (overloaded, resolution_exception: {extracted_call})")
+            self.logger.error(
+                f"Exception during overload resolution for '{dep_call_name}' (params: \"{extracted_call}\") from {source_code_object.id}: {e}",
+                exc_info=True
+            )
+            self.out_of_scope_calls[dep_call_name] = f"overloaded_resolution_exception: {extracted_call}"
 
     def _add_edges_to_graph(self):
         """
@@ -578,9 +589,10 @@ class GraphConstructor:
 
             if source_code_object.clean_code is None:
                 self.logger.warning(f"Source code for {source_node_id} is None. Cannot process its calls for parameter extraction.")
-                # Add all its extracted calls (by name only) to out_of_scope if this happens
+                # Mark all its extracted calls as out-of-scope due to missing source
                 for call in source_code_object.extracted_calls:
-                    self.out_of_scope_calls.add(f"{call.call_name.lower()} (source_unavailable_for_params)")
+                    reason = "source_unavailable_for_params"
+                    self.out_of_scope_calls[call.call_name.lower()] = reason
                 continue
 
             for extracted_call in source_code_object.extracted_calls:
@@ -589,7 +601,7 @@ class GraphConstructor:
 
         self.logger.info(f"Finished adding edges. Graph now has {self.dependency_graph.number_of_edges()} edges.")
 
-    def build_graph(self) -> Tuple[nx.DiGraph, Set[str]]:
+    def build_graph(self) -> Tuple[nx.DiGraph, Dict[str, str]]:
         """
         Orchestrates the entire graph construction process:
         1. Initializes lookup structures.
@@ -597,8 +609,8 @@ class GraphConstructor:
         3. Adds edges (dependencies) to the graph by resolving calls.
 
         Returns:
-            A tuple containing the constructed NetworkX DiGraph and a set of
-            out-of-scope call names encountered during the process.
+            A tuple containing the constructed NetworkX DiGraph and a mapping of
+            out-of-scope call names to their reason codes encountered during the process.
         """
         self.logger.info("Starting dependency graph construction...")
 
