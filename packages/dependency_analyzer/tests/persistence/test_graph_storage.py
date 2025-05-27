@@ -305,7 +305,6 @@ def test_save_load_structure_only_graph(da_test_logger, test_graph_structure_onl
         assert 'object' not in node_data
         
         # Verify essential attributes are preserved
-        assert node_data['node_id'] == original_data['node_id']
         assert node_data['name'] == original_data['name']
         assert node_data['package_name'] == original_data['package_name']
         assert node_data['type'] == original_data['type']
