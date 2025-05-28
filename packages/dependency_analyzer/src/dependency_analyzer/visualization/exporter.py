@@ -162,7 +162,6 @@ def _add_legend_to_graph(
                     shape='ellipse',
                     style='filled'
                 )
-                )
         
         # Arrange legend items vertically using invisible edges
         if len(sorted_types) > 1:
