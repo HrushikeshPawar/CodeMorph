@@ -105,6 +105,12 @@ class DependencyAnalyzerSettings(BaseModel):
         description="Include package names in node labels"
     )
     
+    # Show legend in visualizations
+    show_visualization_legend: bool = Field(
+        default=True,
+        description="Include legend showing node type colors in visualizations"
+    )
+    
     # Package color mapping for visualization
     package_colors: Dict[str, str] = Field(
         default={
@@ -336,6 +342,7 @@ class DependencyAnalyzerSettings(BaseModel):
             "visualization": {
                 "default_visualization_engine": self.default_visualization_engine,
                 "with_package_name_labels": self.with_package_name_labels,
+                "show_visualization_legend": self.show_visualization_legend,
                 "package_colors": self.package_colors,
             },
             "features": {

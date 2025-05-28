@@ -20,6 +20,8 @@ default_graph_format = "graphml"
 default_visualization_engine = "graphviz"
 # Include package names in node labels by default
 with_package_name_labels = true
+# Show legend showing node type colors in visualizations
+show_visualization_legend = true
 
 # Color mapping for packages in visualizations
 [visualization.package_colors]

@@ -551,7 +551,8 @@ class CLIService:
                 viz_graph = exporter.to_graphviz(
                     graph,
                     self.logger,
-                    with_package_name=self.settings.with_package_name_labels
+                    with_package_name=self.settings.with_package_name_labels,
+                    show_legend=self.settings.show_visualization_legend
                 )
                 
                 if title:
