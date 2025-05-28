@@ -579,7 +579,12 @@ class CLIService:
                         "Edges": graph.number_of_edges()
                     }
                 )
-            
+            else:
+                raise CLIError(
+                    f"Unsupported visualization engine: {self.settings.default_visualization_engine.value}",
+                    "Currently only 'graphviz' engine is supported. "
+                    "Please set default_visualization_engine to 'graphviz' in your configuration."
+                )
         except ImportError as e:
             raise CLIError(
                 f"Visualization engine not available: {e}",
@@ -735,6 +740,13 @@ class CLIService:
                         "Downstream depth": downstream_depth or "unlimited",
                         "Formats": "SVG, PNG, DOT"
                     }
+                )
+            
+            else:
+                raise CLIError(
+                    f"Unsupported visualization engine: {self.settings.default_visualization_engine.value}",
+                    "The 'visualize-subgraph' command currently only supports 'graphviz' engine. "
+                    "Please set default_visualization_engine to 'graphviz' in your configuration."
                 )
             
         except ImportError as e:
