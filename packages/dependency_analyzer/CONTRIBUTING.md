@@ -10,7 +10,7 @@ The Dependency Analyzer is a critical component of the CodeMorph project that cr
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - uv — a Python dependency management tool (see [uv documentation](https://github.com/uv-tool/uv) for details)
 - Git
 

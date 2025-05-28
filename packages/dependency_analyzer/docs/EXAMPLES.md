@@ -163,7 +163,7 @@ dependency-analyzer build full \
 dependency-analyzer query reachability \
   --config config.toml \
   --graph-path full_graph.graphml \
-  --source-nodes "BILLING_PKG.CALCULATE_INVOICE" \
+  --source-node "BILLING_PKG.CALCULATE_INVOICE" \
   --direction downstream
 
 # 3. Create a subgraph focusing on this component
@@ -229,8 +229,8 @@ dependency-analyzer analyze cycles --config config.toml --graph-path project_gra
 dependency-analyzer query paths \
   --config config.toml \
   --graph-path project_graph.graphml \
-  --source-nodes "ORDERS_PKG.CREATE_ORDER" \
-  --target-nodes "INVENTORY_PKG.RESERVE_ITEMS"
+  --source-node "ORDERS_PKG.CREATE_ORDER" \
+  --target-node "INVENTORY_PKG.RESERVE_ITEMS"
 
 # 3. Create focused visualization of the cycle
 dependency-analyzer build subgraph \
@@ -463,8 +463,7 @@ print(df.groupby('classification').size())
 dependency-analyzer build full \
   --config large_config.toml \
   --output-fname large_graph \
-  --db ./large_project/PLSQL_CodeObjects.db \
-  --structure-only
+  --db ./large_project/PLSQL_CodeObjects.db
 
 # Use gpickle format for better performance
 # Update config.toml:
