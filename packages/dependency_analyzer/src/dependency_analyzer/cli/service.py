@@ -551,7 +551,8 @@ class CLIService:
                 viz_graph = exporter.to_graphviz(
                     graph,
                     self.logger,
-                    with_package_name=self.settings.with_package_name_labels
+                    with_package_name=self.settings.with_package_name_labels,
+                    show_legend=self.settings.show_visualization_legend
                 )
                 
                 if title:
@@ -577,6 +578,175 @@ class CLIService:
                         "Nodes": graph.number_of_nodes(),
                         "Edges": graph.number_of_edges()
                     }
+                )
+            else:
+                raise CLIError(
+                    f"Unsupported visualization engine: {self.settings.default_visualization_engine.value}",
+                    "Currently only 'graphviz' engine is supported. "
+                    "Please set default_visualization_engine to 'graphviz' in your configuration."
+                )
+        except ImportError as e:
+            raise CLIError(
+                f"Visualization engine not available: {e}",
+                f"Install the required dependencies for {self.settings.default_visualization_engine.value}"
+            )
+        except Exception as e:
+            raise CLIError(
+                f"Failed to create visualization: {e}",
+                "Check if the graph is too large or complex for visualization."
+            )
+        
+        return output_paths
+    
+    def visualize_subgraph_integrated(
+        self,
+        node_id: str,
+        output_image: str,
+        upstream_depth: int = 0,
+        downstream_depth: Optional[int] = None,
+        save_full_graph: Optional[str] = None,
+        save_subgraph: Optional[str] = None,
+        title: Optional[str] = None
+    ) -> List[Path]:
+        """
+        Integrated command to build full graph, extract subgraph, and visualize it.
+        
+        Args:
+            node_id: Central node for subgraph
+            output_image: Base path for output image (without extension)
+            upstream_depth: Levels of callers to include
+            downstream_depth: Levels of callees to include  
+            save_full_graph: Optional path to save full graph
+            save_subgraph: Optional path to save subgraph
+            title: Optional title for visualization
+            
+        Returns:
+            List of paths where visualizations were saved
+            
+        Raises:
+            CLIError: If any step fails
+        """
+        self.logger.info(f"Starting integrated subgraph visualization for node '{node_id}'")
+        
+        # Ensure output directories exist
+        ensure_output_directory(self.settings.visualizations_dir, self.logger)
+        if save_full_graph or save_subgraph:
+            ensure_output_directory(self.settings.graphs_dir, self.logger)
+        
+        # Step 1: Load code objects from database and build full graph in memory
+        with self.database_manager() as db_manager:
+            loader = DatabaseLoader(db_manager, self.logger)
+            code_objects = loader.load_all_objects()
+        
+        if not code_objects:
+            raise CLIError(
+                "No code objects found in database",
+                "Check if the PL/SQL analyzer processed any source files."
+            )
+        
+        self.logger.info(f"Loaded {len(code_objects)} code objects")
+        
+        # Build full graph in memory
+        graph_constructor = GraphConstructor(code_objects, self.logger)
+        full_graph, out_of_scope_calls = graph_constructor.build_graph()
+        
+        self.logger.info(f"Built full graph: {full_graph.number_of_nodes()} nodes, {full_graph.number_of_edges()} edges")
+        
+        # Step 2: Optionally save full graph
+        if save_full_graph:
+            full_graph_path = generate_output_path(
+                self.settings.graphs_dir,
+                save_full_graph,
+                self.settings.graph_format.value,
+                add_timestamp=False,
+                settings=self.settings
+            )
+            
+            if self.graph_storage.save_graph(full_graph, full_graph_path, format=self.settings.graph_format.value):
+                self.logger.info(f"Full graph saved to {full_graph_path}")
+            else:
+                self.logger.warning(f"Failed to save full graph to {full_graph_path}")
+        
+        # Step 3: Validate node exists
+        if node_id not in full_graph:
+            raise CLIError(
+                ERROR_MESSAGES['node_not_found'].format(node_id=node_id),
+                f"Available nodes: {len(full_graph.nodes)}. Use 'query' commands to explore."
+            )
+        
+        # Step 4: Generate subgraph
+        subgraph = analyzer.generate_subgraph_for_node(
+            full_graph, node_id, self.logger, upstream_depth, downstream_depth
+        )
+        
+        if subgraph is None:
+            raise CLIError(
+                f"Failed to generate subgraph for node '{node_id}'",
+                "The node may be isolated or parameters may be too restrictive."
+            )
+        
+        self.logger.info(f"Generated subgraph: {subgraph.number_of_nodes()} nodes, {subgraph.number_of_edges()} edges")
+        
+        # Step 5: Optionally save subgraph
+        if save_subgraph:
+            subgraph_path = generate_output_path(
+                self.settings.graphs_dir,
+                save_subgraph,
+                self.settings.graph_format.value,
+                add_timestamp=False,
+                settings=self.settings
+            )
+            
+            if self.graph_storage.save_graph(subgraph, subgraph_path, format=self.settings.graph_format.value):
+                self.logger.info(f"Subgraph saved to {subgraph_path}")
+            else:
+                self.logger.warning(f"Failed to save subgraph to {subgraph_path}")
+        
+        # Step 6: Create visualization
+        output_paths = []
+        
+        try:
+            if self.settings.default_visualization_engine.value == "graphviz":
+                viz_graph = exporter.to_graphviz(
+                    subgraph,
+                    self.logger,
+                    with_package_name=self.settings.with_package_name_labels,
+                    show_legend=self.settings.show_visualization_legend
+                )
+                
+                if title:
+                    viz_graph.attr(label=title, labelloc="t", fontsize="20")
+                
+                # Render multiple formats
+                for fmt in ["svg", "png"]:
+                    output_path = self.settings.visualizations_dir / f"{output_image}.{fmt}"
+                    viz_graph.render(
+                        filename=output_image,
+                        directory=self.settings.visualizations_dir,
+                        format=fmt,
+                        view=False,
+                        cleanup=False
+                    )
+                    
+                    output_paths.append(output_path)
+                    
+                print_success(
+                    SUCCESS_MESSAGES['visualization_complete'].format(path=self.settings.visualizations_dir),
+                    {
+                        "Central node": node_id,
+                        "Subgraph nodes": subgraph.number_of_nodes(),
+                        "Subgraph edges": subgraph.number_of_edges(),
+                        "Upstream depth": upstream_depth,
+                        "Downstream depth": downstream_depth or "unlimited",
+                        "Formats": "SVG, PNG, DOT"
+                    }
+                )
+            
+            else:
+                raise CLIError(
+                    f"Unsupported visualization engine: {self.settings.default_visualization_engine.value}",
+                    "The 'visualize-subgraph' command currently only supports 'graphviz' engine. "
+                    "Please set default_visualization_engine to 'graphviz' in your configuration."
                 )
             
         except ImportError as e:

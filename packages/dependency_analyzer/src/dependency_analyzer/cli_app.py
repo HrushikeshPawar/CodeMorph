@@ -278,6 +278,47 @@ def visualize_graph(
         sys.exit(1)
 
 
+@visualize_app.command(name="subgraph")
+def visualize_subgraph(
+    config_file: Annotated[Path, config_file_param(True)],
+    node_id: Annotated[str, node_id_param()],
+    output_image: Annotated[str, Parameter(help="Base path for output image (without extension).", name=["--output-image"])],
+    db_path: Annotated[Optional[Path], Parameter(help="Path to the PL/SQL analyzer SQLite database.", name=["--db", "--database"])] = None,
+    upstream_depth: Annotated[int, Parameter(help="Levels of callers to include", name=["--upstream-depth"])] = 0,
+    downstream_depth: Annotated[Optional[int], Parameter(help="Levels of callees to include", name=["--downstream-depth"])] = None,
+    save_full_graph: Annotated[Optional[str], Parameter(help="Optional path to save full graph.", name=["--save-full-graph"])] = None,
+    save_subgraph: Annotated[Optional[str], Parameter(help="Optional path to save subgraph.", name=["--save-subgraph"])] = None,
+    title: Annotated[Optional[str], Parameter(help="Title for the visualization.")] = None,
+    verbose: Annotated[int, verbose_param()] = 1,
+    graph_format: Annotated[Optional[str], graph_format_param()] = None,
+):
+    """Integrated command to build full graph, extract subgraph, and visualize it."""
+    try:
+        settings = DependencyAnalyzerSettings.from_toml(config_file)
+        if db_path:
+            settings.database_path = db_path
+        if graph_format:
+            settings.graph_format = graph_format
+        settings.log_verbose_level = verbose
+        
+        service = CLIService(settings)
+        service.visualize_subgraph_integrated(
+            node_id=node_id,
+            output_image=output_image,
+            upstream_depth=upstream_depth,
+            downstream_depth=downstream_depth,
+            save_full_graph=save_full_graph,
+            save_subgraph=save_subgraph,
+            title=title
+        )
+    except CLIError as e:
+        handle_cli_error(e, logger)
+        sys.exit(1)
+    except Exception as e:
+        handle_cli_error(CLIError(f"Unexpected error during visualize-subgraph: {e}"), logger)
+        sys.exit(1)
+
+
 # =============================================================================
 # QUERY COMMANDS
 # =============================================================================
