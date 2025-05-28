@@ -164,7 +164,7 @@ dependency-analyzer query reachability \
   --config config.toml \
   --graph-path full_graph.graphml \
   --source-node "BILLING_PKG.CALCULATE_INVOICE" \
-  --direction downstream
+  --downstream
 
 # 3. Create a subgraph focusing on this component
 dependency-analyzer build subgraph \
@@ -172,7 +172,7 @@ dependency-analyzer build subgraph \
   --graph-path full_graph.graphml \
   --node-id "BILLING_PKG.CALCULATE_INVOICE" \
   --output-fname impact_analysis \
-  --max-depth 3
+  --downstream-depth 3
 
 # 4. Visualize the impact
 dependency-analyzer visualize subgraph \
@@ -180,7 +180,7 @@ dependency-analyzer visualize subgraph \
   --graph-path full_graph.graphml \
   --node-id "BILLING_PKG.CALCULATE_INVOICE" \
   --output impact_visualization \
-  --max-depth 3
+  --downstream-depth 3
 ```
 
 ### Scenario 2: Migration Planning - Identifying Independent Modules

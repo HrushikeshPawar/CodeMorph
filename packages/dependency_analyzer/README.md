@@ -439,7 +439,7 @@ For large codebases, consider these strategies:
 
 1. **Use Structure-Only Graphs**: Save graphs without code objects for faster loading
 ```bash
-dependency-analyzer build full --save-structure-only true
+dependency-analyzer build full
 ```
 
 2. **Extract Focused Subgraphs**: Work with smaller portions of the graph
@@ -593,7 +593,6 @@ uv run pytest
    - Ensure output directory exists and is writable
 
 4. **Memory issues with large graphs**
-   - Use `--save-structure-only true` for faster loading
    - Extract subgraphs instead of working with full graph
    - Consider using GPickle format for better performance
 

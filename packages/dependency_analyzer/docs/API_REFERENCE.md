@@ -165,8 +165,7 @@ dependency-analyzer build subgraph \
   --config config.toml \
   --input-path project_graph.graphml \
   --node-id "schema_util.validate_input" \
-  --output-fname validation_subgraph \
-  --downstream-depth 999
+  --output-fname validation_subgraph
 ```
 
 **Output:**
@@ -540,7 +539,7 @@ dependency-analyzer query list [OPTIONS]
 | `--package-filter` | String | All | Filter by package name pattern |
 | `--name-filter` | String | All | Filter by node name pattern |
 | `--limit` | Integer | 100 | Maximum number of results |
-| `--sort-by` | String | name | Sort by (name/type/in_degree/out_degree) |
+| `--sort-by` | String | name | Sort by (id/name/type/package/degree/acc) |
 | `--output-format` | String | table | Output format (table/json/csv) |
 | `--include-node-details` | Boolean | false | Include detailed node information |
 | `--graph-format` | String | From config | Input graph format |
