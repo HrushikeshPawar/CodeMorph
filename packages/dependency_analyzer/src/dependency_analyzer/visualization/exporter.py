@@ -158,9 +158,10 @@ def _add_legend_to_graph(
                 legend.node(
                     legend_node_id,
                     label=type_name,
-                    color=color,
+                    fillcolor=color,  # Ensure fill color is set
                     shape='ellipse',
                     style='filled'
+                )
                 )
         
         # Arrange legend items vertically using invisible edges
