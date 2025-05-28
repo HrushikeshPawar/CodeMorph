@@ -169,7 +169,7 @@ dependency-analyzer query reachability \
 dependency-analyzer build subgraph \
   --config config.toml \
   --graph-path full_graph.graphml \
-  --root-nodes "BILLING_PKG.CALCULATE_INVOICE" \
+  --node-id "BILLING_PKG.CALCULATE_INVOICE" \
   --output-fname impact_analysis \
   --max-depth 3
 
@@ -177,7 +177,7 @@ dependency-analyzer build subgraph \
 dependency-analyzer visualize subgraph \
   --config config.toml \
   --graph-path full_graph.graphml \
-  --root-nodes "BILLING_PKG.CALCULATE_INVOICE" \
+  --node-id "BILLING_PKG.CALCULATE_INVOICE" \
   --output impact_visualization \
   --max-depth 3
 ```
@@ -201,7 +201,7 @@ dependency-analyzer query list \
 dependency-analyzer build subgraph \
   --config config.toml \
   --graph-path complete_graph.graphml \
-  --root-nodes "REPORTING_PKG.GENERATE_REPORT" \
+  --node-id "REPORTING_PKG.GENERATE_REPORT" \
   --output-fname reporting_module \
   --max-depth 2
 
@@ -209,7 +209,7 @@ dependency-analyzer build subgraph \
 dependency-analyzer visualize subgraph \
   --config config.toml \
   --graph-path complete_graph.graphml \
-  --root-nodes "REPORTING_PKG.GENERATE_REPORT" \
+  --node-id "REPORTING_PKG.GENERATE_REPORT" \
   --output reporting_module_viz \
   --max-depth 2
 ```
@@ -234,7 +234,7 @@ dependency-analyzer query paths \
 dependency-analyzer build subgraph \
   --config config.toml \
   --graph-path project_graph.graphml \
-  --root-nodes "ORDERS_PKG.CREATE_ORDER,INVENTORY_PKG.RESERVE_ITEMS" \
+  --node-id "ORDERS_PKG.CREATE_ORDER" \
   --output-fname cycle_analysis \
   --max-depth 2
 ```
@@ -285,7 +285,7 @@ for package in BILLING ORDERS INVENTORY CUSTOMERS; do
   dependency-analyzer visualize subgraph \
     --config config.toml \
     --graph-path project_graph.graphml \
-    --root-nodes "${package}_PKG" \
+    --node-id "${package}_PKG" \
     --output "${package,,}_module" \
     --max-depth 2
 done

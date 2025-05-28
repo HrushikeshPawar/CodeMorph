@@ -119,10 +119,14 @@ dependency-analyzer build full \
 
 ```bash
 # Classify nodes by type
-dependency-analyzer analyze classify --graph-path my_graph.graphml
+dependency-analyzer analyze classify \
+  --config dep_analyzer_config.toml \
+  --graph-path my_graph.graphml
 
 # Find cycles in the graph
-dependency-analyzer analyze cycles --graph-path my_graph.graphml
+dependency-analyzer analyze cycles \
+  --config dep_analyzer_config.toml \
+  --graph-path my_graph.graphml
 ```
 
 ### 4. Visualize Dependencies
@@ -147,17 +151,20 @@ dependency-analyzer visualize subgraph \
 ```bash
 # Find what nodes are reachable from a specific node
 dependency-analyzer query reachability \
+  --config dep_analyzer_config.toml \
   --graph-path my_graph.graphml \
   --node-id "schema_app_core.process_payment"
 
 # Find paths between two nodes
 dependency-analyzer query paths \
+  --config dep_analyzer_config.toml \
   --graph-path my_graph.graphml \
   --source-node "schema_app_core.validate_user" \
   --target-node "schema_app_core.process_payment"
 
 # List nodes matching criteria
 dependency-analyzer query list \
+  --config dep_analyzer_config.toml \
   --graph-path my_graph.graphml \
   --node-type function \
   --package-filter "app_core"
