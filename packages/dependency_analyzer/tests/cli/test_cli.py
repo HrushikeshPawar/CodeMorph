@@ -20,7 +20,6 @@ def test_cli_command_groups_structure():
     assert "analyze" in app
     assert "visualize" in app
     assert "query" in app
-    assert "visualize-subgraph" in app  # New integrated command
     
     # Check that each command has the expected subcommands
     assert "full" in app["build"]
@@ -30,6 +29,7 @@ def test_cli_command_groups_structure():
     assert "cycles" in app["analyze"]
     
     assert "graph" in app["visualize"]
+    assert "subgraph" in app["visualize"]
     
     assert "reachability" in app["query"]
     assert "paths" in app["query"]
@@ -146,7 +146,7 @@ def test_build_full_with_config(mocker):
 def test_visualize_subgraph_command_structure():
     """Test that the visualize-subgraph command exists with expected parameters."""
     # Check that the command exists
-    assert "visualize-subgraph" in app
+    assert "subgraph" in app["visualize"]
     
     # The command should be a top-level command, not a subcommand
 
@@ -206,7 +206,8 @@ def test_cli_visualize_subgraph_integration(mocker):
         mocker.patch.object(Path, "exists", return_value=True)
         
         # Execute the visualize-subgraph command
-        app(["visualize-subgraph",
+        app(["visualize", 
+            "subgraph",
             "--config", str(config_path),
             "--db", str(db_path),
             "--node-id", "test_node",
