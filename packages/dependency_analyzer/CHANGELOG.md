@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling with detailed suggestions
 - Enhanced logging system with multiple verbosity levels
 
-### Improved
+### Changed
 - Performance optimizations for large graph processing
 - Better memory management with configurable graph formats
 - Enhanced visualization with package-based color coding
