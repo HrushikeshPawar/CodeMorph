@@ -44,11 +44,12 @@ dependency-analyzer visualize graph \
   --graph-path project_graph.graphml \
   --output project_overview
 
-# 6. Query critical information
+# 6. Query critical information (find high-degree nodes)
 dependency-analyzer query list \
   --config dep_analyzer_config.toml \
   --graph-path project_graph.graphml \
-  --list-type hubs
+  --sort-by degree \
+  --limit 20
 ```
 
 ## Configuration Examples
@@ -191,11 +192,12 @@ dependency-analyzer visualize subgraph \
 dependency-analyzer build full --config config.toml --output-fname complete_graph --db ./data/PLSQL_CodeObjects.db
 dependency-analyzer analyze classify --config config.toml --graph-path complete_graph.graphml
 
-# 2. Find orphaned components (potential independent modules)
+# 2. Find nodes in small components (potential orphans)
 dependency-analyzer query list \
   --config config.toml \
   --graph-path complete_graph.graphml \
-  --list-type orphans
+  --sort-by degree \
+  --limit 50
 
 # 3. Analyze each orphaned component
 dependency-analyzer build subgraph \
@@ -322,7 +324,7 @@ generate-reports: analyze-dependencies
 	dependency-analyzer query list \
 		--config ci_config.toml \
 		--graph-path $(BUILD_ID)_graph.graphml \
-		--list-type hubs > $(BUILD_ID)_hubs.txt
+		--sort-by degree --limit 20 > $(BUILD_ID)_high_degree_nodes.txt
 ```
 
 ### Use Case 2: Batch Processing Multiple Databases
@@ -374,8 +376,8 @@ dependency-analyzer analyze classify --config config.toml --graph-path v1_graph.
 dependency-analyzer analyze classify --config config.toml --graph-path v2_graph.graphml
 
 # Generate comparison reports
-dependency-analyzer query list --config config.toml --graph-path v1_graph.graphml --list-type hubs > v1_hubs.txt
-dependency-analyzer query list --config config.toml --graph-path v2_graph.graphml --list-type hubs > v2_hubs.txt
+dependency-analyzer query list --config config.toml --graph-path v1_graph.graphml --sort-by degree --limit 20 > v1_high_degree.txt
+dependency-analyzer query list --config config.toml --graph-path v2_graph.graphml --sort-by degree --limit 20 > v2_high_degree.txt
 diff v1_hubs.txt v2_hubs.txt
 ```
 
@@ -483,7 +485,7 @@ ls -la ./data/PLSQL_CodeObjects.db
 dependency-analyzer query list \
   --config config.toml \
   --graph-path existing_graph.graphml \
-  --list-type all
+  --limit 10
 ```
 
 ### Example 3: Configuration Validation Errors
