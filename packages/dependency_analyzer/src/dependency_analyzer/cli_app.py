@@ -278,7 +278,7 @@ def visualize_graph(
         sys.exit(1)
 
 
-@app.command(name="visualize-subgraph")
+@visualize_app.command(name="subgraph")
 def visualize_subgraph(
     config_file: Annotated[Path, config_file_param(True)],
     node_id: Annotated[str, node_id_param()],
