@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.1.0] - 2025-05-28
 
 ### Added
-- Comprehensive documentation update with README.md, CONFIGURATION.md, and API_REFERENCE.md
+- Comprehensive documentation update with README.md, CONFIGURATION.md, API_REFERENCE.md, CONTRIBUTING.md, EXAMPLES.md, and CHANGELOG.md
 - Complete CLI command structure with command groups (init, build, analyze, visualize, query)
 - TOML configuration system with Pydantic validation
 - Node classification algorithms (hubs, utilities, bridges, orphans)
