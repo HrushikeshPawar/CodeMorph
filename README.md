@@ -89,7 +89,7 @@ CodeMorph supports modern Python package managers and requires **Python >= 3.12*
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/CodeMorph.git
+git clone https://github.com/HrushikeshPawar/CodeMorph.git
 cd CodeMorph
 
 # Install all workspace packages
