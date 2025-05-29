@@ -224,7 +224,7 @@ def generate_default_config_toml() -> str:
     for field_name, field_info in settings_model.model_fields.items():
         
         # Skip computed fields, as they are derived and not set by users in config
-        if field_name in ['artifacts_dir', 'logs_dir', 'database_path']:
+        if field_name in settings_model.model_computed_fields: # Check against model's computed fields
             continue
 
         # Add field description as a comment
