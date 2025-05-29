@@ -60,10 +60,28 @@ class CallDetailExtractor:
         if call_name_token.upper() in self.keywords_to_drop:
             return toks
 
+        # Use helper method to check if this identifier is preceded by "END"
+        if self._is_preceded_by_end(s, loc):
+            # This is likely an "END <name>;" statement, skip recording as a call
+            return toks
+
         # Ensure code_string_for_parsing is set before scan_string is called
         lineno = self.cleaned_code.count('\n', 0, loc) + 1
         self.temp_extracted_calls_list.append((call_name_token, lineno))
         return toks
+
+    def _is_preceded_by_end(self, s: str, loc: int) -> bool:
+        """
+        Check if the identifier at `loc` is preceded by 'END'.
+        This helps filter out false positives from END statements.
+        """
+        # Look back for 'END' before the current location
+        preceding_text = s[max(0, loc-10):loc].upper()
+
+        # Check if 'END' is present and is the last non-whitespace word before the identifier
+        if preceding_text.strip().endswith('END'):
+            return True
+        return False
 
     def _setup_parser(self):
         # Suppress delimiters commonly found around or in calls, but not part of the name
@@ -158,6 +176,12 @@ class CallDetailExtractor:
             # Filter out common SQL keywords or specified keywords
             if current_call_name.upper() in self.keywords_to_drop:
                 self.logger.trace(f"Dropping potential call '{current_call_name}' as it's in keywords_to_drop.")
+                continue
+
+            # Filter out END statement identifiers (false positives from END <name>;) 
+            # Check preceding text for 'END' keyword
+            if self._is_preceded_by_end(self.cleaned_code, start_loc):
+                self.logger.trace(f"Skipping END statement identifier '{current_call_name}' at {start_loc}-{end_loc}.")
                 continue
             
             # Find the corresponding entry in temp_extracted_calls_list
