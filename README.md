@@ -229,7 +229,7 @@ dependency-analyzer query list \
 ## 📊 Example Output
 
 ### Dependency Graph Visualization
-![Dependency Graph Example](demo/generated/artifacts/visualizations/dep-graph.svg)
+![Dependency Graph Example](demo/artifacts/visualizations/dep-graph.svg)
 
 ### Node Classification Results
 ```
