@@ -250,7 +250,7 @@ def generate_default_config_toml() -> str:
         # Convert specific types to TOML-compatible formats
         if isinstance(default_value, Path):
             default_value = str(default_value)
-        elif isinstance(default_value, set|list): # Convert set to list for TOML
+        elif isinstance(default_value, (set, list)): # Convert set to list for TOML
             # For lists, convert to TOML array format
             if len(default_value) == 0:
                 default_value = []
