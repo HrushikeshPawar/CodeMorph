@@ -225,8 +225,6 @@ def test_custom_keywords_to_drop(code: str, keywords_to_drop: list[str], expecte
     for act, exp in zip(results, expected_calls):
         assert act == exp
     
-
-
 def test_unbalanced_parentheses_warning(extractor, caplog):
     """Tests that a warning is logged for unbalanced parentheses in parameters."""
     # Malformed code where parameter parsing might fail gracefully
@@ -252,7 +250,6 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
     # TODO: Should we do it?
     # assert results[0].named_params == {'b': '(c + d'} # The rest is consumed until end or error
     assert results[0].named_params == {} # For now this is what happens
-
 
 @pytest.mark.parametrize(
     "code, allow_parameterless_setting, expected_call_details",
@@ -418,13 +415,6 @@ def test_parameter_parsing_edge_cases(extractor: CallDetailExtractor):
     # Manually calculated expected start/end indices:
     # Note: These are 0-based and depend highly on whitespace and newlines.
     # This requires careful manual calculation or running the code to get actuals.
-    # Let's assume the provided indices in the original `expected` list were placeholders
-    # and recalculate them based on the `code` string.
-    
-    # Example recalculation (approximate, needs verification):
-    # empty_params: starts after "BEGIN\n    -- Empty params\n    " -> index ~35
-    # whitespace_params: starts after "\n    -- Params with only whitespace\n    " -> index ~90
-    # ... and so on.
     
     # For robustness, let's compare without indices if they prove too fragile:
     results_no_indices = [r._replace(start_idx=0, end_idx=0) for r in results]
@@ -488,3 +478,338 @@ def test_extract_call_params_logic(extractor: CallDetailExtractor, code_fragment
     # The param_tuple contains restored literals, so compare against expected directly
     assert param_tuple.positional_params == expected_positional
     assert param_tuple.named_params == expected_named
+
+# --- Tests for strict_lpar_only_calls feature --- #
+@pytest.mark.parametrize("strict_lpar_only_calls,allow_parameterless,code,expected_calls", [
+    # Test 1: strict_lpar_only_calls=False (default behavior) - should detect both (...) and ; calls
+    (False, True, "BEGIN my_proc; your_func(); END;", [
+        CallDetailsTuple('my_proc', 1, 6, 13, [], {}),
+        CallDetailsTuple('your_func', 1, 15, 24, [], {})
+    ]),
+    
+    # Test 2: strict_lpar_only_calls=True, allow_parameterless=True - should only detect (...) calls, ignoring ; calls
+    (True, True, "BEGIN my_proc; your_func(); END;", [
+        CallDetailsTuple('your_func', 1, 15, 24, [], {})
+    ]),
+    
+    # Test 3: strict_lpar_only_calls=True, allow_parameterless=False - should detect calls with parentheses (both empty and with params)
+    (True, False, "BEGIN my_proc; your_func(); their_func(a); END;", [
+        CallDetailsTuple('your_func', 1, 15, 24, [], {}),
+        CallDetailsTuple('their_func', 1, 28, 38, ['a'], {})
+    ]),
+    
+    # Test 4: Complex scenario with qualified names
+    (True, True, "BEGIN pkg.proc1; pkg.proc2(); schema.pkg.func3; schema.pkg.func4(p => v); END;", [
+        CallDetailsTuple('pkg.proc2', 1, 17, 26, [], {}),
+        CallDetailsTuple('schema.pkg.func4', 1, 48, 64, [], {'p': 'v'})
+    ]),
+    
+    # Test 5: Mixed with keywords that should be dropped
+    (True, True, "BEGIN SYSDATE; my_proc(); COMMIT; your_func(1); END;", [
+        CallDetailsTuple('my_proc', 1, 15, 22, [], {}),
+        CallDetailsTuple('your_func', 1, 34, 43, ['1'], {})
+    ]),        # Test 6: Edge case - semicolon in string literals (should not affect parsing)
+        (True, True, "BEGIN log_msg('Process; completed'); send_notification(); END;", [
+            CallDetailsTuple('log_msg', 1, 6, 13, ["'Process; completed'"], {}),
+            CallDetailsTuple('send_notification', 1, 30, 47, [], {})
+        ]),
+])
+def test_strict_lpar_only_calls(strict_lpar_only_calls, allow_parameterless, code, expected_calls):
+    """Tests the strict_lpar_only_calls feature with various combinations of settings."""
+    extractor = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls)
+    
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=allow_parameterless)
+    
+    assert len(results) == len(expected_calls), f"Expected {len(expected_calls)} calls but got {len(results)}"
+    
+    for actual, expected in zip(results, expected_calls):
+        assert actual == expected
+
+def test_strict_lpar_only_calls_constructor():
+    """Test that the CallDetailExtractor constructor properly accepts and stores the strict_lpar_only_calls setting."""
+    # Test default value
+    extractor_default = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP)
+    assert not extractor_default.strict_lpar_only_calls
+    
+    # Test explicit False
+    extractor_false = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=False)
+    assert not extractor_false.strict_lpar_only_calls
+    
+    # Test explicit True
+    extractor_true = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=True)
+    assert extractor_true.strict_lpar_only_calls
+
+@pytest.mark.parametrize("strict_setting,code,should_detect_semicolon_call", [
+    # When strict=False, semicolon calls should be detected
+    (False, "BEGIN procedure_call; END;", True),
+    # When strict=True, semicolon calls should NOT be detected  
+    (True, "BEGIN procedure_call; END;", False),
+    # Parenthesis calls should always be detected regardless of strict setting
+    (False, "BEGIN procedure_call(); END;", True),
+    (True, "BEGIN procedure_call(); END;", True),
+])
+def test_strict_setting_semicolon_detection(strict_setting, code, should_detect_semicolon_call):
+    """Focused test to verify that the strict setting correctly controls semicolon call detection."""
+    extractor = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=strict_setting)
+    
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    if should_detect_semicolon_call:
+        assert len(results) == 1, f"Expected to detect call but got {len(results)} results"
+        assert results[0].call_name == 'procedure_call'
+    else:
+        assert len(results) == 0, f"Expected no calls to be detected but got {len(results)} results"
+
+def test_strict_lpar_only_calls_multiline():
+    """Test strict_lpar_only_calls with multiline code scenarios."""
+    multiline_code = """
+    BEGIN
+        -- This should not be detected when strict=True
+        initialize_system;
+        
+        -- These should be detected when strict=True
+        setup_config();
+        process_data(p_batch_size => 1000);
+        
+        -- This should not be detected when strict=True
+        cleanup_resources;
+    END;
+    """
+    
+    # Test with strict=True
+    extractor_strict = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=True)
+    clean_code, literal_map = clean_code_and_map_literals(multiline_code, extractor_strict.logger)
+    results_strict = extractor_strict.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    expected_strict_calls = ['setup_config', 'process_data']
+    actual_strict_calls = [call.call_name for call in results_strict]
+    assert actual_strict_calls == expected_strict_calls
+    
+    # Test with strict=False for comparison
+    extractor_loose = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=False)
+    results_loose = extractor_loose.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    expected_loose_calls = ['initialize_system', 'setup_config', 'process_data', 'cleanup_resources']
+    actual_loose_calls = [call.call_name for call in results_loose]
+    assert actual_loose_calls == expected_loose_calls
+
+
+# --- Test END statement false positive prevention ---
+
+@pytest.mark.parametrize("code, expected_calls, description", [
+        # Test 1: Procedure with END statement - should not extract the procedure name from "END proc_name;"
+        (
+            "PROCEDURE test_proc IS BEGIN call_actual_proc; END test_proc;",
+            [CallDetailsTuple('call_actual_proc', 1, 29, 45, [], {})],
+            "Procedure END statement should not be extracted as call"
+        ),
+        # Test 2: Function with END statement - should not extract the function name from "END func_name;"
+        (
+            "FUNCTION test_func RETURN NUMBER IS BEGIN RETURN 0; END test_func;",
+            [],
+            "Function END statement should not be extracted as call"
+        ),        # Test 3: Multiple procedures with END statements
+        (
+            """PROCEDURE p1 IS BEGIN proc_call1; END p1;
+            PROCEDURE p2 IS BEGIN proc_call2; END p2;""",
+            [
+                CallDetailsTuple('proc_call1', 1, 22, 32, [], {}),
+                CallDetailsTuple('proc_call2', 2, 76, 86, [], {}),
+                # Note: Currently the extractor has an issue processing the second procedure
+                # This should be investigated as a separate issue
+            ],
+            "Multiple procedures should not extract names from END statements"
+        ),# Test 4: Valid semicolon-terminated calls should still work
+        (
+            "BEGIN simple_proc; actual_call; END;",
+            [
+                CallDetailsTuple('simple_proc', 1, 6, 17, [], {}),
+                CallDetailsTuple('actual_call', 1, 19, 30, [], {})
+            ],
+            "Valid semicolon-terminated calls should still be extracted"
+        ),        # Test 5: END with extra whitespace - should handle "END   proc_name;"
+        (
+            "PROCEDURE spaced_proc IS BEGIN call_me; END   spaced_proc;",
+            [CallDetailsTuple('call_me', 1, 31, 38, [], {})],
+            "END with extra whitespace should not be extracted as call"
+        ),
+        # Test 6: Case insensitive END - should handle "end PROC_NAME;"
+        (
+            "PROCEDURE case_proc IS BEGIN another_call; end case_proc;",
+            [CallDetailsTuple('another_call', 1, 29, 41, [], {})],
+            "Case insensitive END should not be extracted as call"
+        ),        # Test 7: Nested blocks with END statements
+        (
+            """PROCEDURE outer_proc IS
+        BEGIN
+            inner_call;
+            BEGIN
+                nested_call;
+            END inner_block;
+        END outer_proc;""",
+            [
+                CallDetailsTuple('inner_call', 3, 50, 60, [], {}),
+                CallDetailsTuple('nested_call', 5, 96, 107, [], {})
+            ],
+            "Nested blocks should not extract names from END statements"
+        ),# Test 8: END followed by identifier not being a call (edge case)
+        (
+            "BEGIN valid_call; END; -- Not followed by identifier",
+            [CallDetailsTuple('valid_call', 1, 6, 16, [], {})],
+            "END without identifier should not affect call extraction"
+        ),        # Test 9: Package with procedures and END statements
+        (
+            """PACKAGE BODY test_pkg IS
+        PROCEDURE pkg_proc IS
+        BEGIN
+            pkg_call;
+        END pkg_proc;
+        END test_pkg;""",
+            [CallDetailsTuple('pkg_call', 4, 81, 89, [], {})],
+            "Package body with procedures should not extract names from END statements"
+        ),        # Test 10: Mixed scenario with valid calls and END statements
+        (
+            """PROCEDURE mixed_scenario IS
+        BEGIN
+            before_call;
+            IF condition THEN
+                conditional_call;
+            END IF;
+            after_call;
+        END mixed_scenario;""",
+            [
+                CallDetailsTuple('before_call', 3, 54, 65, [], {}),
+                CallDetailsTuple('conditional_call', 5, 113, 129, [], {}),
+                CallDetailsTuple('after_call', 7, 163, 173, [], {})
+            ],
+            "Mixed scenario should extract valid calls but not END statements"
+        ),
+        (
+            """PROCEDURE overloaded IS
+        BEGIN
+            before_call;
+            IF condition THEN
+                overloaded;
+            END IF;
+            after_call;
+        END overloaded;""",
+            [
+                CallDetailsTuple('before_call', 3, 50, 61, [], {}),
+                CallDetailsTuple('overloaded', 5, 109, 119, [], {}),
+                CallDetailsTuple('after_call', 7, 153, 163, [], {})
+            ],
+            "Mixed scenario should extract valid calls but not END statements"
+        )
+])
+def test_end_statement_false_positive_prevention(extractor: CallDetailExtractor, code: str, expected_calls: List[CallDetailsTuple], description: str):
+    """Test that identifiers in END statements are not incorrectly extracted as calls."""
+    # Enable semicolon-terminated call detection to test the fix
+    extractor.strict_lpar_only_calls = False
+    
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    # Convert results to comparable format
+    actual_calls = [
+        CallDetailsTuple(call.call_name, call.line_no, call.start_idx, call.end_idx,
+                        call.positional_params, call.named_params)
+        for call in results
+    ]
+    
+    assert actual_calls == expected_calls, f"{description}: Expected {expected_calls}, got {actual_calls}"
+
+
+# --- Test Oracle Outer Join Syntax Detection ---
+
+@pytest.mark.parametrize("code, expected_calls, description", [
+    # Test 1: Oracle outer join mixed with legitimate function calls in PL/SQL
+    (
+        """BEGIN
+            v_result := get_employee_data(p_id => 123);
+            SELECT e.name, d.name 
+            FROM employees e, departments d 
+            WHERE e.dept_id = d.dept_id(+)
+            AND e.status = get_active_status();
+        END;""",
+        [
+            CallDetailsTuple('get_employee_data', 2, 30, 47, [], {'p_id': '123'}),
+            CallDetailsTuple('get_active_status', 6, 212, 229, [], {})
+        ],
+        "Oracle outer join should be ignored while legitimate function calls are extracted"
+    ),
+    # Test 2: Function call that legitimately has '+' as parameter (not outer join)
+    (
+        "BEGIN calculate_sum('+', 'ADD'); END;",
+        [CallDetailsTuple('calculate_sum', 1, 6, 19, ["'+'", "'ADD'"], {})],
+        "Legitimate function call with '+' parameter should be extracted"
+    ),
+    # Test 3: Function call with named parameter having '+' value
+    (
+        "BEGIN set_operation(operation => '+', value => 10); END;",
+        [CallDetailsTuple('set_operation', 1, 6, 19, [], {'operation': "'+'", 'value': '10'})],
+        "Function call with named parameter having '+' value should be extracted"
+    ),
+    # Test 4: Simple test to verify outer join detection logic
+    (
+        "BEGIN dummy_call(); SELECT * FROM t1, t2 WHERE t1.id = t2.id(+); END;",
+        [CallDetailsTuple('dummy_call', 1, 6, 16, [], {})],
+        "Simple case: outer join should be ignored, legitimate call should be extracted"
+    ),
+    # Test 5: Verify outer joins are filtered but other calls are not
+    (
+        "BEGIN test_proc(); SELECT a FROM x WHERE y = z.id(+); another_proc(); END;",
+        [
+            CallDetailsTuple('test_proc', 1, 6, 15, [], {}),
+            CallDetailsTuple('another_proc', 1, 54, 66, [], {})
+        ],
+        "Multiple statements with outer join: outer join should be ignored, other calls extracted"
+    ),
+])
+def test_oracle_outer_join_detection(extractor: CallDetailExtractor, code: str, expected_calls: List[CallDetailsTuple], description: str):
+    """Test that Oracle outer join syntax (+) is correctly detected and not extracted as function calls."""
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    # Convert results to comparable format
+    actual_calls = [
+        CallDetailsTuple(call.call_name, call.line_no, call.start_idx, call.end_idx,
+                        call.positional_params, call.named_params)
+        for call in results
+    ]
+    
+    assert actual_calls == expected_calls, f"{description}: Expected {expected_calls}, got {actual_calls}"
+
+
+def test_end_statement_with_different_configurations():
+    """Test END statement handling with different extractor configurations."""
+    code = "PROCEDURE my_proc IS BEGIN actual_call; END my_proc;"
+    
+    # Test with strict_lpar_only_calls=True (should not affect END filtering since it only affects parentheses)
+    extractor_strict = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=True)
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor_strict.logger)
+    results_strict = extractor_strict.extract_calls_with_details(clean_code, literal_map, allow_parameterless=False)
+    
+    # Should find no calls because strict mode requires parentheses and allow_parameterless=False
+    assert len(results_strict) == 0
+    
+    # Test with strict_lpar_only_calls=False 
+    extractor_loose = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=False)
+    results_loose = extractor_loose.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    # Should find actual_call but not my_proc from END statement
+    assert len(results_loose) == 1
+    assert results_loose[0].call_name == 'actual_call'
+    
+    # Log check: ensure END statement identifier skip is logged for 'my_proc'
+    # Prepare a capture for TRACE level messages on the loose extractor
+    trace_logs = []
+    extractor_loose.logger.remove()
+    extractor_loose.logger.add(lambda msg: trace_logs.append(msg), level="TRACE")
+    # Run extraction to generate logs on loose extractor
+    extractor_loose.strict_lpar_only_calls = False
+    extractor_loose.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    # Verify skip log for END statement identifier 'my_proc'
+    assert any("Skipping END statement identifier 'my_proc'" in str(log) for log in trace_logs), \
+        f"Expected trace log for skipping END statement identifier, but got: {trace_logs}"

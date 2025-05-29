@@ -30,13 +30,14 @@ class CallDetailsTuple(NamedTuple):
 
 
 class CallDetailExtractor:
-    def __init__(self, logger: lg.Logger, keywords_to_drop:List[str]):
+    def __init__(self, logger: lg.Logger, keywords_to_drop:List[str], strict_lpar_only_calls: bool = False):
         self.logger = logger.bind(parser_type="CallDetailExtractor")
         self.keywords_to_drop = {kw.upper() for kw in keywords_to_drop}
         self.temp_extracted_calls_list: List[Tuple[str, int]] = []
         self.code_string_for_parsing = "" # Renamed for clarity
         self.cleaned_code = ""
         self.allow_parameterless_config: bool = False # Default to False
+        self.strict_lpar_only_calls: bool = strict_lpar_only_calls
         self._setup_parser()
 
     def _reset_internal_state(self):
@@ -59,10 +60,28 @@ class CallDetailExtractor:
         if call_name_token.upper() in self.keywords_to_drop:
             return toks
 
+        # Use helper method to check if this identifier is preceded by "END"
+        if self._is_preceded_by_end(s, loc):
+            # This is likely an "END <name>;" statement, skip recording as a call
+            return toks
+
         # Ensure code_string_for_parsing is set before scan_string is called
         lineno = self.cleaned_code.count('\n', 0, loc) + 1
         self.temp_extracted_calls_list.append((call_name_token, lineno))
         return toks
+
+    def _is_preceded_by_end(self, s: str, loc: int) -> bool:
+        """
+        Check if the identifier at `loc` is preceded by 'END'.
+        This helps filter out false positives from END statements.
+        """
+        # Look back for 'END' before the current location
+        preceding_text = s[max(0, loc-10):loc].upper()
+
+        # Check if 'END' is present and is the last non-whitespace word before the identifier
+        if preceding_text.strip().endswith('END'):
+            return True
+        return False
 
     def _setup_parser(self):
         # Suppress delimiters commonly found around or in calls, but not part of the name
@@ -90,7 +109,11 @@ class CallDetailExtractor:
 
         # Define what a call looks like. It must be followed by ( or ;
         # to distinguish from variable names.
-        self.codeobject_call_pattern = self.qualified_identifier_call + (LPAR | SEMI)
+        # When strict_lpar_only_calls is True, only allow LPAR (opening parenthesis)
+        if self.strict_lpar_only_calls:
+            self.codeobject_call_pattern = self.qualified_identifier_call + LPAR
+        else:
+            self.codeobject_call_pattern = self.qualified_identifier_call + (LPAR | SEMI)
 
         # Record original positions for reporting
         self.codeobject_call_pattern.set_parse_action(self._record_call)
@@ -153,6 +176,12 @@ class CallDetailExtractor:
             # Filter out common SQL keywords or specified keywords
             if current_call_name.upper() in self.keywords_to_drop:
                 self.logger.trace(f"Dropping potential call '{current_call_name}' as it's in keywords_to_drop.")
+                continue
+
+            # Filter out END statement identifiers (false positives from END <name>;) 
+            # Check preceding text for 'END' keyword
+            if self._is_preceded_by_end(self.cleaned_code, start_loc):
+                self.logger.trace(f"Skipping END statement identifier '{current_call_name}' at {start_loc}-{end_loc}.")
                 continue
             
             # Find the corresponding entry in temp_extracted_calls_list
@@ -298,6 +327,14 @@ class CallDetailExtractor:
         if param_nested_lvl != 0:
             self.logger.warning(f"Parameter parsing for '{call_info.call_name}' ended with unbalanced parentheses. Nesting level: {param_nested_lvl}. Results might be incomplete.")
 
+        # Check for Oracle outer join syntax: column_name(+)
+        # Oracle outer join has exactly one positional parameter with value '+' and no named parameters
+        if (len(positional_params) == 1 and 
+            len(named_params) == 0 and 
+            positional_params[0].strip() == '+'):
+            self.logger.trace(f"Detected Oracle outer join syntax for '{call_info.call_name}(+)'. Skipping as it's not a function call.")
+            return None  # Skip this "call" as it's actually an Oracle outer join operator
+        
         # Restore literals
         restored_positional_params = [re.sub(r'<LITERAL_\d+>', lambda match: self.literal_mapping.get(match.group(0), match.group(0)), p) for p in positional_params]
         restored_named_params = {
