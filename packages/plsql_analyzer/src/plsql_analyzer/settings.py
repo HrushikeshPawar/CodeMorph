@@ -33,7 +33,7 @@ class PLSQLAnalyzerSettings(BaseModel):
 
     exclude_names_from_processed_path: List[str] = Field(
         default_factory=lambda: [],
-        description="Directory names to exclude from analysis."
+        description="Directory names to exclude for path processing.\n## Example if plsql code dir: `dirA/dirB/schema_name/package_name.pkb`, and don't want to include `dirA`, `dirB`, in the path derivation, so add them here: ['dirA', 'dirB']."
     )
 
     # Parts of the file path to exclude when deriving the package name from the file path.
