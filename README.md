@@ -443,7 +443,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Pyvis** - Interactive network visualizations
 - **Loguru** - Advanced logging capabilities
 - **Pydantic** - Data validation and settings management
-- **Click** - Command-line interface framework
+- **Cyclopts** - Command-line interface framework
 
 ## 📞 Support
 
