@@ -69,7 +69,7 @@ log_verbose_level = 3  # Maximum verbosity for debugging
 default_graph_format = "gpickle"  # Fastest format for development
 
 [visualization]
-default_visualization_engine = "pyvis"  # Interactive exploration
+default_visualization_engine = "graphviz"
 with_package_name_labels = true
 show_visualization_legend = true
 
@@ -266,20 +266,7 @@ dependency-analyzer visualize graph \
   --engine graphviz
 ```
 
-### Example 2: Interactive Exploration
-
-```bash
-# Create interactive visualization for exploration
-dependency-analyzer visualize graph \
-  --config config.toml \
-  --graph-path project_graph.graphml \
-  --output interactive_graph \
-  --engine pyvis
-```
-
-This creates an HTML file that allows interactive exploration of the dependency graph.
-
-### Example 3: Multiple Subgraph Visualizations
+### Example 2: Multiple Subgraph Visualizations
 
 ```bash
 # Create visualizations for different packages

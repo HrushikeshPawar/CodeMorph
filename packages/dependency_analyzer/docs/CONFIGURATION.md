@@ -106,12 +106,11 @@ Controls how visualizations are generated and styled.
 
 **Visualization Engines:**
 - `"graphviz"`: Produces high-quality static images (PNG, SVG, DOT)
-- `"pyvis"`: Produces interactive HTML files with JavaScript
 
 **Example:**
 ```toml
 [visualization]
-default_visualization_engine = "pyvis"  # Use interactive visualizations
+default_visualization_engine = "graphviz"
 with_package_name_labels = false        # Cleaner node labels
 show_visualization_legend = true        # Keep legend for clarity
 ```
@@ -305,7 +304,7 @@ log_verbose_level = 3  # Detailed tracing
 default_graph_format = "gpickle"  # Fastest format
 
 [visualization]
-default_visualization_engine = "pyvis"  # Interactive for exploration
+default_visualization_engine = "graphviz"
 with_package_name_labels = true
 show_visualization_legend = true
 

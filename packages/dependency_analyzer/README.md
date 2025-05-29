@@ -21,8 +21,7 @@ The Dependency Analyzer creates and analyzes dependency graphs (call graphs) fro
 - **Path Finding**: Find shortest paths between any two nodes
 
 ### 🎨 **Visualization**
-- **Multiple Engines**: Support for Graphviz and Pyvis visualizations
-- **Interactive Views**: Web-based interactive graphs with Pyvis
+- **Engine**: Support for Graphviz visualizations
 - **Customizable Styling**: Package-based coloring and node styling
 - **Export Formats**: PNG, SVG, and HTML output formats
 
@@ -388,7 +387,7 @@ default_graph_format = "graphml"  # Options: "gpickle", "graphml", "gexf", "json
 ```toml
 [visualization]
 # Default engine for visualizing graphs
-default_visualization_engine = "graphviz"  # Options: "graphviz", "pyvis"
+default_visualization_engine = "graphviz"  # Options: "graphviz"
 # Include package names in node labels by default
 with_package_name_labels = true
 # Show legend showing node type colors in visualizations
@@ -424,7 +423,6 @@ orphan_component_max_size = 4
 
 ### Visualization Formats
 - **Graphviz**: Generates static images (PNG, SVG) and DOT files
-- **Pyvis**: Generates interactive HTML files with JavaScript
 
 ### Analysis Output Formats
 - **Table**: Formatted console table output
