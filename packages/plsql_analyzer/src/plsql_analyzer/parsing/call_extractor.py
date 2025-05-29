@@ -70,6 +70,19 @@ class CallDetailExtractor:
         self.temp_extracted_calls_list.append((call_name_token, lineno))
         return toks
 
+    def _is_preceded_by_end(self, s: str, loc: int) -> bool:
+        """
+        Check if the identifier at `loc` is preceded by 'END'.
+        This helps filter out false positives from END statements.
+        """
+        # Look back for 'END' before the current location
+        preceding_text = s[max(0, loc-10):loc].upper()
+
+        # Check if 'END' is present and is the last non-whitespace word before the identifier
+        if preceding_text.strip().endswith('END'):
+            return True
+        return False
+
     def _setup_parser(self):
         # Suppress delimiters commonly found around or in calls, but not part of the name
         LPAR, RPAR, COMMA, SEMI, ASSIGN_OP, ARROW_OP = map(pp.Suppress, ["(", ")", ",", ";", ":=", "=>"])
@@ -167,11 +180,9 @@ class CallDetailExtractor:
 
             # Filter out END statement identifiers (false positives from END <name>;) 
             # Check preceding text for 'END' keyword
-            if start_loc >= 4:
-                preceding_text = self.cleaned_code[max(0, start_loc-10):start_loc].upper()
-                if preceding_text.rstrip().endswith('END'):
-                    self.logger.trace(f"Skipping END statement identifier '{current_call_name}' at {start_loc}-{end_loc}.")
-                    continue
+            if self._is_preceded_by_end(self.cleaned_code, start_loc):
+                self.logger.trace(f"Skipping END statement identifier '{current_call_name}' at {start_loc}-{end_loc}.")
+                continue
             
             # Find the corresponding entry in temp_extracted_calls_list
             # This assumes _record_call and this loop process in the same order for non-dropped items.
