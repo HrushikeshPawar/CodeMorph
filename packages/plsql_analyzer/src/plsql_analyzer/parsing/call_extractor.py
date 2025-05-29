@@ -60,13 +60,10 @@ class CallDetailExtractor:
         if call_name_token.upper() in self.keywords_to_drop:
             return toks
 
-        # Check if this identifier is preceded by "END " (case-insensitive)
-        # to avoid false positives from "END <procedure_name>;" statements
-        if loc >= 4:  # Need at least 4 characters for "END "
-            preceding_text = s[max(0, loc-10):loc].upper()  # Look back up to 10 chars for whitespace
-            if preceding_text.rstrip().endswith('END'):
-                # This is likely an "END <name>;" statement, skip recording as a call
-                return toks
+        # Use helper method to check if this identifier is preceded by "END"
+        if self._is_preceded_by_end(s, loc):
+            # This is likely an "END <name>;" statement, skip recording as a call
+            return toks
 
         # Ensure code_string_for_parsing is set before scan_string is called
         lineno = self.cleaned_code.count('\n', 0, loc) + 1
