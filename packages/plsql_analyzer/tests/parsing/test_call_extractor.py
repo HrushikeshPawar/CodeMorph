@@ -225,8 +225,6 @@ def test_custom_keywords_to_drop(code: str, keywords_to_drop: list[str], expecte
     for act, exp in zip(results, expected_calls):
         assert act == exp
     
-
-
 def test_unbalanced_parentheses_warning(extractor, caplog):
     """Tests that a warning is logged for unbalanced parentheses in parameters."""
     # Malformed code where parameter parsing might fail gracefully
@@ -252,7 +250,6 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
     # TODO: Should we do it?
     # assert results[0].named_params == {'b': '(c + d'} # The rest is consumed until end or error
     assert results[0].named_params == {} # For now this is what happens
-
 
 @pytest.mark.parametrize(
     "code, allow_parameterless_setting, expected_call_details",
@@ -418,13 +415,6 @@ def test_parameter_parsing_edge_cases(extractor: CallDetailExtractor):
     # Manually calculated expected start/end indices:
     # Note: These are 0-based and depend highly on whitespace and newlines.
     # This requires careful manual calculation or running the code to get actuals.
-    # Let's assume the provided indices in the original `expected` list were placeholders
-    # and recalculate them based on the `code` string.
-    
-    # Example recalculation (approximate, needs verification):
-    # empty_params: starts after "BEGIN\n    -- Empty params\n    " -> index ~35
-    # whitespace_params: starts after "\n    -- Params with only whitespace\n    " -> index ~90
-    # ... and so on.
     
     # For robustness, let's compare without indices if they prove too fragile:
     results_no_indices = [r._replace(start_idx=0, end_idx=0) for r in results]
@@ -488,3 +478,119 @@ def test_extract_call_params_logic(extractor: CallDetailExtractor, code_fragment
     # The param_tuple contains restored literals, so compare against expected directly
     assert param_tuple.positional_params == expected_positional
     assert param_tuple.named_params == expected_named
+
+# --- Tests for strict_lpar_only_calls feature --- #
+@pytest.mark.parametrize("strict_lpar_only_calls,allow_parameterless,code,expected_calls", [
+    # Test 1: strict_lpar_only_calls=False (default behavior) - should detect both (...) and ; calls
+    (False, True, "BEGIN my_proc; your_func(); END;", [
+        CallDetailsTuple('my_proc', 1, 6, 13, [], {}),
+        CallDetailsTuple('your_func', 1, 15, 24, [], {})
+    ]),
+    
+    # Test 2: strict_lpar_only_calls=True, allow_parameterless=True - should only detect (...) calls, ignoring ; calls
+    (True, True, "BEGIN my_proc; your_func(); END;", [
+        CallDetailsTuple('your_func', 1, 15, 24, [], {})
+    ]),
+    
+    # Test 3: strict_lpar_only_calls=True, allow_parameterless=False - should detect calls with parentheses (both empty and with params)
+    (True, False, "BEGIN my_proc; your_func(); their_func(a); END;", [
+        CallDetailsTuple('your_func', 1, 15, 24, [], {}),
+        CallDetailsTuple('their_func', 1, 28, 38, ['a'], {})
+    ]),
+    
+    # Test 4: Complex scenario with qualified names
+    (True, True, "BEGIN pkg.proc1; pkg.proc2(); schema.pkg.func3; schema.pkg.func4(p => v); END;", [
+        CallDetailsTuple('pkg.proc2', 1, 17, 26, [], {}),
+        CallDetailsTuple('schema.pkg.func4', 1, 48, 64, [], {'p': 'v'})
+    ]),
+    
+    # Test 5: Mixed with keywords that should be dropped
+    (True, True, "BEGIN SYSDATE; my_proc(); COMMIT; your_func(1); END;", [
+        CallDetailsTuple('my_proc', 1, 15, 22, [], {}),
+        CallDetailsTuple('your_func', 1, 34, 43, ['1'], {})
+    ]),        # Test 6: Edge case - semicolon in string literals (should not affect parsing)
+        (True, True, "BEGIN log_msg('Process; completed'); send_notification(); END;", [
+            CallDetailsTuple('log_msg', 1, 6, 13, ["'Process; completed'"], {}),
+            CallDetailsTuple('send_notification', 1, 30, 47, [], {})
+        ]),
+])
+def test_strict_lpar_only_calls(strict_lpar_only_calls, allow_parameterless, code, expected_calls):
+    """Tests the strict_lpar_only_calls feature with various combinations of settings."""
+    extractor = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls)
+    
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=allow_parameterless)
+    
+    assert len(results) == len(expected_calls), f"Expected {len(expected_calls)} calls but got {len(results)}"
+    
+    for actual, expected in zip(results, expected_calls):
+        assert actual == expected
+
+def test_strict_lpar_only_calls_constructor():
+    """Test that the CallDetailExtractor constructor properly accepts and stores the strict_lpar_only_calls setting."""
+    # Test default value
+    extractor_default = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP)
+    assert not extractor_default.strict_lpar_only_calls
+    
+    # Test explicit False
+    extractor_false = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=False)
+    assert not extractor_false.strict_lpar_only_calls
+    
+    # Test explicit True
+    extractor_true = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=True)
+    assert extractor_true.strict_lpar_only_calls
+
+@pytest.mark.parametrize("strict_setting,code,should_detect_semicolon_call", [
+    # When strict=False, semicolon calls should be detected
+    (False, "BEGIN procedure_call; END;", True),
+    # When strict=True, semicolon calls should NOT be detected  
+    (True, "BEGIN procedure_call; END;", False),
+    # Parenthesis calls should always be detected regardless of strict setting
+    (False, "BEGIN procedure_call(); END;", True),
+    (True, "BEGIN procedure_call(); END;", True),
+])
+def test_strict_setting_semicolon_detection(strict_setting, code, should_detect_semicolon_call):
+    """Focused test to verify that the strict setting correctly controls semicolon call detection."""
+    extractor = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=strict_setting)
+    
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    if should_detect_semicolon_call:
+        assert len(results) == 1, f"Expected to detect call but got {len(results)} results"
+        assert results[0].call_name == 'procedure_call'
+    else:
+        assert len(results) == 0, f"Expected no calls to be detected but got {len(results)} results"
+
+def test_strict_lpar_only_calls_multiline():
+    """Test strict_lpar_only_calls with multiline code scenarios."""
+    multiline_code = """
+    BEGIN
+        -- This should not be detected when strict=True
+        initialize_system;
+        
+        -- These should be detected when strict=True
+        setup_config();
+        process_data(p_batch_size => 1000);
+        
+        -- This should not be detected when strict=True
+        cleanup_resources;
+    END;
+    """
+    
+    # Test with strict=True
+    extractor_strict = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=True)
+    clean_code, literal_map = clean_code_and_map_literals(multiline_code, extractor_strict.logger)
+    results_strict = extractor_strict.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    expected_strict_calls = ['setup_config', 'process_data']
+    actual_strict_calls = [call.call_name for call in results_strict]
+    assert actual_strict_calls == expected_strict_calls
+    
+    # Test with strict=False for comparison
+    extractor_loose = CallDetailExtractor(logger, CALL_EXTRACTOR_KEYWORDS_TO_DROP, strict_lpar_only_calls=False)
+    results_loose = extractor_loose.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    expected_loose_calls = ['initialize_system', 'setup_config', 'process_data', 'cleanup_resources']
+    actual_loose_calls = [call.call_name for call in results_loose]
+    assert actual_loose_calls == expected_loose_calls

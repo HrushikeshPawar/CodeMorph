@@ -50,9 +50,10 @@ def parse(
     include_patterns: Annotated[Optional[List[str]], Parameter(help="File extensions to include in analysis.", name=["--fext", "-e"], consume_multiple=True)] = None,
     exclude_dirs: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from analysis.", name=["--exd"], consume_multiple=True)] = None,
     exclude_names: Annotated[Optional[List[str]], Parameter(help="Directory names to exclude from package naming process.", name=["--exn"], consume_multiple=True)] = None,
-    database_filename: Annotated[Optional[str], Parameter(help="Name of the SQLite database file.", name=["--db-filename", "--dbf"])] = None,
+    database_filename: Annotated[Optional[str], Parameter(help="Name of the SQLite database file.", name=["--db-filename", "--df"])] = None,
     force_reprocess: Annotated[Optional[List[str]], Parameter(help="Force reprocessing specific files, bypassing hash checks.", name=["--force-reprocess"], consume_multiple=True)] = None,
     clear_history_for_file: Annotated[Optional[List[str]], Parameter(help="Clear history for specific files (using processed paths as stored in DB).", name=["--clear-history-for-file"], consume_multiple=True)] = None,
+    strict_calls: Annotated[Optional[bool], Parameter(help="Only consider identifiers followed by '(' as calls, ignoring ';' terminated identifiers.", name=["--strict-calls"])] = None,
 ):
     """
     Parse PL/SQL source code to extract various code objects - Procedures and Function.
@@ -76,6 +77,7 @@ def parse(
         "database_filename": database_filename,
         "force_reprocess": set(force_reprocess) if force_reprocess else None,
         "clear_history_for_file": set(clear_history_for_file) if clear_history_for_file else None,
+        "strict_lpar_only_calls": strict_calls,
     }
 
     # Filter out None values from CLI args to not override TOML/defaults unnecessarily
@@ -140,7 +142,7 @@ def run_plsql_analyzer(app_config: PLSQLAnalyzerSettings, logger:'Logger'):
     # Parsers are generally stateless or reset per call, so one instance can be reused.
     structural_parser = PlSqlStructuralParser(logger, app_config.log_verbose_level)
     signature_parser = PLSQLSignatureParser(logger) # Does not depend on verbose_lvl for its own ops
-    call_extractor = CallDetailExtractor(logger, app_config.call_extractor_keywords_to_drop)
+    call_extractor = CallDetailExtractor(logger, app_config.call_extractor_keywords_to_drop, app_config.strict_lpar_only_calls)
 
     # 4. Initialize and Run the Extraction Workflow
     workflow = ExtractionWorkflow(

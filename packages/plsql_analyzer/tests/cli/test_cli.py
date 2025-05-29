@@ -80,7 +80,7 @@ def test_cli_help_parse_command(capsys, mock_run_plsql_analyzer):
     assert "--exd" in std_out
     assert "--exn" in std_out
     assert "--db-filename" in std_out
-    assert "--dbf" in std_out
+    assert "--df" in std_out
     # log_file_prefix and log_trace_file_prefix are CLI args, not directly in PLSQLAnalyzerSettings help text
     # but their corresponding PLSQLAnalyzerSettings fields might be if they existed.
 
@@ -135,7 +135,7 @@ def test_cli_argument_aliases(capsys, dummy_source_dir, mocker):
 
 
     # Test database filename aliases
-    cli_app(["parse", "--source-dir", str(dummy_source_dir), "--dbf", "test1.db"])
+    cli_app(["parse", "--source-dir", str(dummy_source_dir), "--df", "test1.db"])
     config_dbf = mock_run.call_args[0][0]  # First argument to run_plsql_analyzer
     assert "test1.db" == config_dbf.database_filename
 
@@ -252,7 +252,6 @@ def test_cli_invalid_config_file(capsys, dummy_source_dir, tmp_path):
     with pytest.raises(tomllib.TOMLDecodeError):
         cli_app(["parse", "--source-dir", str(dummy_source_dir), "--config-file", str(invalid_config)])
 
-
 def test_cli_paths_absolute_relative(capsys, dummy_source_dir, tmp_path, mocker):
     mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
     # Test with relative paths
@@ -316,3 +315,114 @@ def test_clear_history_for_file_option(mocker, dummy_source_dir):
     assert "processed/path/file1.sql" in config.clear_history_for_file
     assert "processed/path/file2.sql" in config.clear_history_for_file
 
+# --- Tests for strict_calls CLI option --- #
+
+def test_cli_strict_calls_option(mocker, tmp_path: Path):
+    """Test that the --strict-calls CLI option is properly processed."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    
+    # Test with --strict-calls (should set strict_lpar_only_calls=True)
+    cli_app([
+        "parse",
+        "--source-dir", str(source_dir),
+        "--strict-calls"
+    ])
+    
+    mock_run.assert_called_once()
+    config = mock_run.call_args[0][0]
+    assert config.strict_lpar_only_calls
+
+def test_cli_no_strict_calls_option(mocker, tmp_path: Path):
+    """Test that the --no-strict-calls CLI option is properly processed."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    
+    # Test with --no-strict-calls (should set strict_lpar_only_calls=False)
+    cli_app([
+        "parse",
+        "--source-dir", str(source_dir),
+        "--no-strict-calls"
+    ])
+    
+    mock_run.assert_called_once()
+    config = mock_run.call_args[0][0]
+    assert not config.strict_lpar_only_calls
+
+def test_cli_strict_calls_default(mocker, tmp_path: Path):
+    """Test that strict_lpar_only_calls defaults to False when no option is provided."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    
+    # Test without any strict-calls option
+    cli_app([
+        "parse",
+        "--source-dir", str(source_dir)
+    ])
+    
+    mock_run.assert_called_once()
+    config = mock_run.call_args[0][0]
+    assert not config.strict_lpar_only_calls
+
+def test_cli_strict_calls_with_config_file(mocker, tmp_path: Path):
+    """Test CLI strict_calls option overrides config file setting."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    
+    # Create config file with strict_lpar_only_calls=False
+    config_content = {
+        "source_code_root_dir": str(source_dir),
+        "strict_lpar_only_calls": False
+    }
+    config_file = tmp_path / "config.toml"
+    with open(config_file, "w") as f:
+        tomlkit.dump(config_content, f)
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    
+    # CLI argument should override config file
+    cli_app([
+        "parse",
+        "--source-dir", str(source_dir),
+        "--config-file", str(config_file),
+        "--strict-calls"
+    ])
+    
+    mock_run.assert_called_once()
+    config = mock_run.call_args[0][0]
+    assert config.strict_lpar_only_calls  # CLI should override config file
+
+@pytest.mark.parametrize("toml_value,expected_value", [
+    (True, True),
+    (False, False),
+])
+def test_config_file_strict_lpar_only_calls(mocker, tmp_path: Path, toml_value, expected_value):
+    """Test that strict_lpar_only_calls can be set via TOML config file."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    
+    config_content = {
+        "source_code_root_dir": str(source_dir),
+        "strict_lpar_only_calls": toml_value
+    }
+    config_file = tmp_path / "config.toml"
+    with open(config_file, "w") as f:
+        tomlkit.dump(config_content, f)
+    
+    mock_run = mocker.patch('plsql_analyzer.cli.run_plsql_analyzer')
+    
+    cli_app([
+        "parse",
+        "--source-dir", str(source_dir),
+        "--config-file", str(config_file)
+    ])
+    
+    mock_run.assert_called_once()
+    config = mock_run.call_args[0][0]
+    assert config.strict_lpar_only_calls == expected_value
