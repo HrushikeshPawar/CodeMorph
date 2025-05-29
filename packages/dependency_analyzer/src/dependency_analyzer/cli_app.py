@@ -372,8 +372,8 @@ def query_reachability(
 @query_app.command(name="paths")
 def query_paths(
     graph_path: Annotated[Path, graph_path_param(True)],
-    source_node: Annotated[str, source_node_param(True)],
-    target_node: Annotated[str, target_node_param(True)],
+    source_node: Annotated[str, source_node_param()],
+    target_node: Annotated[str, target_node_param()],
     config_file: Annotated[Path, config_file_param(True)],
     verbose: Annotated[int, verbose_param()] = 1,
     graph_format: Annotated[Optional[str], graph_format_param()] = None,

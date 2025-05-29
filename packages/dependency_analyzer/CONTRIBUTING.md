@@ -18,7 +18,7 @@ The Dependency Analyzer is a critical component of the CodeMorph project that cr
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/HrushikeshPawar/CodeMorph
    cd CodeMorph/packages/dependency_analyzer
    ```
 

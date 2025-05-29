@@ -74,20 +74,18 @@ def input_path_param():
         validator=validate_path_exists
     )
 
-def source_node_param(required: bool = False):
+def source_node_param():
     """Create a source node parameter."""
     return Parameter(
         name=["--source", "-s"],
-        help=PARAMETER_HELP['source_node'],
-        validator=validate_path_exists if required else None
+        help=PARAMETER_HELP['source_node']
     )
 
-def target_node_param(required: bool = False):
+def target_node_param():
     """Create a target node parameter."""
     return Parameter(
         name=["--target", "-t"],
-        help=PARAMETER_HELP['target_node'],
-        validator=validate_path_exists if required else None
+        help=PARAMETER_HELP['target_node']
     )
 
 
