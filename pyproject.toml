@@ -40,3 +40,6 @@ dev = [
     "pytest-xdist[psutil]>=3.6.1",
     "snakeviz>=2.2.2",
 ]
+temp = [
+    "gitingest>=0.1.4",
+]
