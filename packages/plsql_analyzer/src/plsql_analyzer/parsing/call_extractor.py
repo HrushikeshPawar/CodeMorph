@@ -60,6 +60,14 @@ class CallDetailExtractor:
         if call_name_token.upper() in self.keywords_to_drop:
             return toks
 
+        # Check if this identifier is preceded by "END " (case-insensitive)
+        # to avoid false positives from "END <procedure_name>;" statements
+        if loc >= 4:  # Need at least 4 characters for "END "
+            preceding_text = s[max(0, loc-10):loc].upper()  # Look back up to 10 chars for whitespace
+            if preceding_text.rstrip().endswith('END'):
+                # This is likely an "END <name>;" statement, skip recording as a call
+                return toks
+
         # Ensure code_string_for_parsing is set before scan_string is called
         lineno = self.cleaned_code.count('\n', 0, loc) + 1
         self.temp_extracted_calls_list.append((call_name_token, lineno))
@@ -159,6 +167,14 @@ class CallDetailExtractor:
             if current_call_name.upper() in self.keywords_to_drop:
                 self.logger.trace(f"Dropping potential call '{current_call_name}' as it's in keywords_to_drop.")
                 continue
+
+            # Filter out END statement identifiers (false positives from END <name>;) 
+            # Check preceding text for 'END' keyword
+            if start_loc >= 4:
+                preceding_text = self.cleaned_code[max(0, start_loc-10):start_loc].upper()
+                if preceding_text.rstrip().endswith('END'):
+                    self.logger.trace(f"Skipping END statement identifier '{current_call_name}' at {start_loc}-{end_loc}.")
+                    continue
             
             # Find the corresponding entry in temp_extracted_calls_list
             # This assumes _record_call and this loop process in the same order for non-dropped items.
