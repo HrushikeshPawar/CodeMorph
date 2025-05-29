@@ -69,7 +69,7 @@ Advanced graph analysis and visualization tool for understanding code dependenci
 - **Subgraph Generation**: Extract focused views around specific nodes
 - **Node Classification**: Automatic identification of hubs, utilities, orphans, and terminals
 - **Cycle Detection**: Find and analyze circular dependencies
-- **Interactive Visualization**: Web-based graphs with Graphviz and Pyvis
+- **Interactive Visualization**: Web-based graphs with Graphviz
 - **Reachability Analysis**: Discover upstream/downstream dependencies
 - **Path Finding**: Shortest paths between any two nodes
 
@@ -105,7 +105,7 @@ Traditional pip installation:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/CodeMorph.git
+git clone https://github.com/HrushikeshPawar/CodeMorph.git
 cd CodeMorph
 
 # Install the main package (includes both sub-packages)
@@ -346,7 +346,7 @@ dependency-analyzer visualize subgraph --node-id "critical_procedure" --downstre
 
 ```bash
 # Clone and setup development environment
-git clone https://github.com/yourusername/CodeMorph.git
+git clone https://github.com/HrushikeshPawar/CodeMorph.git
 cd CodeMorph
 
 # Install with development dependencies
@@ -406,7 +406,7 @@ We welcome contributions! Please see our [Contributing Guidelines](./packages/de
 ```
 Languages Supported:     PL/SQL → Java SpringBoot
 Analysis Capabilities:   15+ graph metrics, cycle detection, path analysis
-Visualization Engines:   Graphviz, Pyvis, NetworkX
+Visualization Engines:   Graphviz, NetworkX
 Export Formats:         GraphML, GEXF, JSON, PNG, SVG, HTML
 Database Storage:       SQLite with full metadata persistence
 CLI Commands:           25+ commands across 2 packages
@@ -439,11 +439,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **NetworkX** - Graph analysis and manipulation
-- **Graphviz** - Graph visualization engine  
-- **Pyvis** - Interactive network visualizations
+- **Graphviz** - Graph visualization engine
 - **Loguru** - Advanced logging capabilities
 - **Pydantic** - Data validation and settings management
-- **Cyclopts** - Command-line interface framework
+- **Cylopts** - Command-line interface framework
 
 ## 📞 Support
 
