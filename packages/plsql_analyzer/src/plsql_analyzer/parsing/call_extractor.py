@@ -327,6 +327,14 @@ class CallDetailExtractor:
         if param_nested_lvl != 0:
             self.logger.warning(f"Parameter parsing for '{call_info.call_name}' ended with unbalanced parentheses. Nesting level: {param_nested_lvl}. Results might be incomplete.")
 
+        # Check for Oracle outer join syntax: column_name(+)
+        # Oracle outer join has exactly one positional parameter with value '+' and no named parameters
+        if (len(positional_params) == 1 and 
+            len(named_params) == 0 and 
+            positional_params[0].strip() == '+'):
+            self.logger.trace(f"Detected Oracle outer join syntax for '{call_info.call_name}(+)'. Skipping as it's not a function call.")
+            return None  # Skip this "call" as it's actually an Oracle outer join operator
+        
         # Restore literals
         restored_positional_params = [re.sub(r'<LITERAL_\d+>', lambda match: self.literal_mapping.get(match.group(0), match.group(0)), p) for p in positional_params]
         restored_named_params = {

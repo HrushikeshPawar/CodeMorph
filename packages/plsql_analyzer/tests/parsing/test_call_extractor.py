@@ -721,6 +721,67 @@ def test_end_statement_false_positive_prevention(extractor: CallDetailExtractor,
     assert actual_calls == expected_calls, f"{description}: Expected {expected_calls}, got {actual_calls}"
 
 
+# --- Test Oracle Outer Join Syntax Detection ---
+
+@pytest.mark.parametrize("code, expected_calls, description", [
+    # Test 1: Oracle outer join mixed with legitimate function calls in PL/SQL
+    (
+        """BEGIN
+            v_result := get_employee_data(p_id => 123);
+            SELECT e.name, d.name 
+            FROM employees e, departments d 
+            WHERE e.dept_id = d.dept_id(+)
+            AND e.status = get_active_status();
+        END;""",
+        [
+            CallDetailsTuple('get_employee_data', 2, 30, 47, [], {'p_id': '123'}),
+            CallDetailsTuple('get_active_status', 6, 212, 229, [], {})
+        ],
+        "Oracle outer join should be ignored while legitimate function calls are extracted"
+    ),
+    # Test 2: Function call that legitimately has '+' as parameter (not outer join)
+    (
+        "BEGIN calculate_sum('+', 'ADD'); END;",
+        [CallDetailsTuple('calculate_sum', 1, 6, 19, ["'+'", "'ADD'"], {})],
+        "Legitimate function call with '+' parameter should be extracted"
+    ),
+    # Test 3: Function call with named parameter having '+' value
+    (
+        "BEGIN set_operation(operation => '+', value => 10); END;",
+        [CallDetailsTuple('set_operation', 1, 6, 19, [], {'operation': "'+'", 'value': '10'})],
+        "Function call with named parameter having '+' value should be extracted"
+    ),
+    # Test 4: Simple test to verify outer join detection logic
+    (
+        "BEGIN dummy_call(); SELECT * FROM t1, t2 WHERE t1.id = t2.id(+); END;",
+        [CallDetailsTuple('dummy_call', 1, 6, 16, [], {})],
+        "Simple case: outer join should be ignored, legitimate call should be extracted"
+    ),
+    # Test 5: Verify outer joins are filtered but other calls are not
+    (
+        "BEGIN test_proc(); SELECT a FROM x WHERE y = z.id(+); another_proc(); END;",
+        [
+            CallDetailsTuple('test_proc', 1, 6, 15, [], {}),
+            CallDetailsTuple('another_proc', 1, 54, 66, [], {})
+        ],
+        "Multiple statements with outer join: outer join should be ignored, other calls extracted"
+    ),
+])
+def test_oracle_outer_join_detection(extractor: CallDetailExtractor, code: str, expected_calls: List[CallDetailsTuple], description: str):
+    """Test that Oracle outer join syntax (+) is correctly detected and not extracted as function calls."""
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
+    
+    # Convert results to comparable format
+    actual_calls = [
+        CallDetailsTuple(call.call_name, call.line_no, call.start_idx, call.end_idx,
+                        call.positional_params, call.named_params)
+        for call in results
+    ]
+    
+    assert actual_calls == expected_calls, f"{description}: Expected {expected_calls}, got {actual_calls}"
+
+
 def test_end_statement_with_different_configurations():
     """Test END statement handling with different extractor configurations."""
     code = "PROCEDURE my_proc IS BEGIN actual_call; END my_proc;"
