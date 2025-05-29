@@ -139,6 +139,15 @@ call_extractor_keywords_to_drop = [
 
 # Other Settings
 # -------------
+# Allow parameterless calls: Whether to extract calls that do not have parameters.
+# Example: `my_procedure;` or `SYSDATE` vs only extracting `my_procedure()` patterns.
+allow_parameterless_calls = false
+
+# Strict LPAR only calls: When true, only identifiers followed by '(' are considered calls,
+# ignoring ';' terminated identifiers during initial parsing. This reduces false positives
+# for users who only want `name(...)` syntax as calls.
+strict_lpar_only_calls = false
+
 # Add any additional custom settings below this point
 # custom_setting_1 = "value"
 # custom_setting_2 = 123

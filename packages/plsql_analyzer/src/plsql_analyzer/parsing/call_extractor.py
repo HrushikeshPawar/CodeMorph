@@ -30,13 +30,14 @@ class CallDetailsTuple(NamedTuple):
 
 
 class CallDetailExtractor:
-    def __init__(self, logger: lg.Logger, keywords_to_drop:List[str]):
+    def __init__(self, logger: lg.Logger, keywords_to_drop:List[str], strict_lpar_only_calls: bool = False):
         self.logger = logger.bind(parser_type="CallDetailExtractor")
         self.keywords_to_drop = {kw.upper() for kw in keywords_to_drop}
         self.temp_extracted_calls_list: List[Tuple[str, int]] = []
         self.code_string_for_parsing = "" # Renamed for clarity
         self.cleaned_code = ""
         self.allow_parameterless_config: bool = False # Default to False
+        self.strict_lpar_only_calls: bool = strict_lpar_only_calls
         self._setup_parser()
 
     def _reset_internal_state(self):
@@ -90,7 +91,11 @@ class CallDetailExtractor:
 
         # Define what a call looks like. It must be followed by ( or ;
         # to distinguish from variable names.
-        self.codeobject_call_pattern = self.qualified_identifier_call + (LPAR | SEMI)
+        # When strict_lpar_only_calls is True, only allow LPAR (opening parenthesis)
+        if self.strict_lpar_only_calls:
+            self.codeobject_call_pattern = self.qualified_identifier_call + LPAR
+        else:
+            self.codeobject_call_pattern = self.qualified_identifier_call + (LPAR | SEMI)
 
         # Record original positions for reporting
         self.codeobject_call_pattern.set_parse_action(self._record_call)

@@ -67,6 +67,11 @@ class PLSQLAnalyzerSettings(BaseModel):
         description="Whether to extract calls that do not have parameters, e.g., `my_procedure;` or `SYSDATE`."
     )
 
+    strict_lpar_only_calls: bool = Field(
+        default=False,
+        description="When True, only identifiers followed by '(' are considered calls, ignoring ';' terminated identifiers during initial parsing"
+    )
+
     @computed_field
     def artifacts_dir(self) -> Path:
         return self.output_base_dir

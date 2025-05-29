@@ -55,3 +55,56 @@ def test_path_expansion(monkeypatch):
     )
     assert str(config.source_code_root_dir).startswith(str(Path.home().parent))
     assert config.output_base_dir == Path("/tmp/mytest/subdir").resolve()
+
+def test_call_analysis_settings():
+    """Test call analysis related settings including the new strict_lpar_only_calls."""
+    # Test default values
+    config = PLSQLAnalyzerSettings(source_code_root_dir="/tmp")
+    assert not config.allow_parameterless_calls
+    assert not config.strict_lpar_only_calls
+    
+    # Test explicit values
+    config_custom = PLSQLAnalyzerSettings(
+        source_code_root_dir="/tmp",
+        allow_parameterless_calls=True,
+        strict_lpar_only_calls=True
+    )
+    assert config_custom.allow_parameterless_calls
+    assert config_custom.strict_lpar_only_calls
+
+def test_strict_lpar_only_calls_boolean_validation():
+    """Test that strict_lpar_only_calls accepts boolean values and type coercion."""
+    # Valid boolean values
+    config_true = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls=True)
+    assert config_true.strict_lpar_only_calls
+    
+    config_false = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls=False)
+    assert not config_false.strict_lpar_only_calls
+    
+    # Test that Pydantic performs type coercion for common boolean representations
+    # These should be coerced to boolean values, not raise errors
+    config_str_true = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls="true")
+    assert config_str_true.strict_lpar_only_calls
+    
+    config_str_false = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls="false")
+    assert not config_str_false.strict_lpar_only_calls
+    
+    config_int_true = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls=1)
+    assert config_int_true.strict_lpar_only_calls
+    
+    config_int_false = PLSQLAnalyzerSettings(source_code_root_dir="/tmp", strict_lpar_only_calls=0)
+    assert not config_int_false.strict_lpar_only_calls
+
+def test_settings_field_descriptions():
+    """Test that the new setting has proper field description."""
+    from plsql_analyzer.settings import PLSQLAnalyzerSettings
+    
+    # Get field info from the Pydantic model
+    fields = PLSQLAnalyzerSettings.model_fields
+    
+    # Check that strict_lpar_only_calls field exists and has description
+    assert 'strict_lpar_only_calls' in fields
+    field_info = fields['strict_lpar_only_calls']
+    assert field_info.description is not None
+    assert "only identifiers followed by '('" in field_info.description
+    assert "ignoring ';' terminated identifiers" in field_info.description
