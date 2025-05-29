@@ -1,0 +1,125 @@
+digraph {
+	rankdir=LR
+	node [fontname=Arial fontsize=12 shape=ellipse style=filled]
+	"schema_app_core.is_employee_active" [label="is_employee_active
+(schema_app_core)" color=lightblue shape=ellipse]
+	"schema_app_core.archive_old_projects" [label="archive_old_projects
+(schema_app_core)" color=cyan shape=ellipse]
+	"schema_app_core.old_unused_procedure" [label="old_unused_procedure
+(schema_app_core)" color=cyan shape=ellipse]
+	"schema_app_finance.trigger_nightly_payroll_run" [label="trigger_nightly_payroll_run
+(schema_app_finance)" color=cyan shape=ellipse]
+	"schema_app_core.employee_pkg.get_employee_raw_data" [label="get_employee_raw_data
+(schema_app_core.employee_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.employee_pkg.get_manager_details_internal" [label="get_manager_details_internal
+(schema_app_core.employee_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.employee_pkg.add_employee" [label="add_employee
+(schema_app_core.employee_pkg)" color=cyan shape=ellipse]
+	"schema_app_core.employee_pkg.get_employee" [label="get_employee
+(schema_app_core.employee_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.employee_pkg.update_employee_info" [label="update_employee_info
+(schema_app_core.employee_pkg)" color=cyan shape=ellipse]
+	"schema_app_core.employee_pkg.get_manager_name" [label="get_manager_name
+(schema_app_core.employee_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.employee_pkg.get_direct_reports" [label="get_direct_reports
+(schema_app_core.employee_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.project_pkg.create_project" [label="create_project
+(schema_app_core.project_pkg)" color=cyan shape=ellipse]
+	"schema_app_core.project_pkg.get_project_details" [label="get_project_details
+(schema_app_core.project_pkg)" color=lightblue shape=ellipse]
+	"schema_app_core.project_pkg.assign_employee_to_project" [label="assign_employee_to_project
+(schema_app_core.project_pkg)" color=cyan shape=ellipse]
+	"schema_app_core.project_pkg.get_assigned_employees" [label="get_assigned_employees
+(schema_app_core.project_pkg)" color=lightblue shape=ellipse]
+	"schema_app_finance.invoice_pkg.create_invoice_for_project" [label="create_invoice_for_project
+(schema_app_finance.invoice_pkg)" color=cyan shape=ellipse]
+	"schema_app_finance.invoice_pkg.get_invoice_amount" [label="get_invoice_amount
+(schema_app_finance.invoice_pkg)" color=lightblue shape=ellipse]
+	"schema_app_finance.invoice_pkg.send_invoice" [label="send_invoice
+(schema_app_finance.invoice_pkg)" color=cyan shape=ellipse]
+	"schema_app_finance.invoice_pkg.dummy_utl_http_call" [label="dummy_utl_http_call
+(schema_app_finance.invoice_pkg)" color=cyan shape=ellipse]
+	"schema_app_finance.invoice_pkg.dummy_utl_file_write" [label="dummy_utl_file_write
+(schema_app_finance.invoice_pkg)" color=cyan shape=ellipse]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" [label="process_employee_payroll
+(schema_app_finance.payroll_pkg)" color=cyan shape=ellipse]
+	"schema_app_finance.payroll_pkg.calculate_tax-4412c2d4ec4b62febba3a3a5bfc7a2503de192c35a1c7c832cb10473b9312c1a" [label="calculate_tax
+(schema_app_finance.payroll_pkg)" color=lightblue shape=ellipse]
+	"schema_app_finance.payroll_pkg.calculate_tax-8068f7961cd98d57dc614a4b68d716c112365ce1bb8bef95269db41be88beda5" [label="calculate_tax
+(schema_app_finance.payroll_pkg)" color=lightblue shape=ellipse]
+	"schema_app_finance.payroll_pkg.generate_payslip" [label="generate_payslip
+(schema_app_finance.payroll_pkg)" color=cyan shape=ellipse]
+	"schema_util_common.date_utils_pkg.add_business_days" [label="add_business_days
+(schema_util_common.date_utils_pkg)" color=lightblue shape=ellipse]
+	"schema_util_common.date_utils_pkg.format_date-4d8017a27ba885c78e8802d546a9ed252cd8860374f1a852a3392e3a5f41df48" [label="format_date
+(schema_util_common.date_utils_pkg)" color=lightblue shape=ellipse]
+	"schema_util_common.date_utils_pkg.format_date-054b37e737f9871afbc8dec8f3b3a2fc6ecf296aa26cc4ab64a9e44823a87411" [label="format_date
+(schema_util_common.date_utils_pkg)" color=lightblue shape=ellipse]
+	"schema_util_common.logger_pkg.log_message" [label="log_message
+(schema_util_common.logger_pkg)" color=cyan shape=ellipse]
+	"schema_util_common.logger_pkg.log_debug" [label="log_debug
+(schema_util_common.logger_pkg)" color=cyan shape=ellipse]
+	"schema_util_common.logger_pkg.log_error" [label="log_error
+(schema_util_common.logger_pkg)" color=cyan shape=ellipse]
+	"schema_util_common.string_utils_pkg.to_title_case" [label="to_title_case
+(schema_util_common.string_utils_pkg)" color=lightblue shape=ellipse]
+	"schema_util_common.string_utils_pkg.safe_substr" [label="safe_substr
+(schema_util_common.string_utils_pkg)" color=lightblue shape=ellipse]
+	"schema_util_common.logger_pkg.log_info" [label="log_info
+(schema_util_common.logger_pkg)" color=lightgray shape=ellipse]
+	"schema_app_core.archive_old_projects" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_core.archive_old_projects" -> "schema_util_common.date_utils_pkg.format_date-4d8017a27ba885c78e8802d546a9ed252cd8860374f1a852a3392e3a5f41df48" [color=lightgray]
+	"schema_app_core.archive_old_projects" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_core.archive_old_projects" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_finance.trigger_nightly_payroll_run" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_finance.trigger_nightly_payroll_run" -> "schema_app_finance.payroll_pkg.generate_payslip" [color=lightgray]
+	"schema_app_finance.trigger_nightly_payroll_run" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_core.employee_pkg.get_manager_details_internal" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_core.employee_pkg.get_manager_details_internal" -> "schema_app_core.employee_pkg.get_manager_name" [color=lightgray]
+	"schema_app_core.employee_pkg.get_manager_details_internal" -> "schema_app_core.employee_pkg.get_employee_raw_data" [color=lightgray]
+	"schema_app_core.employee_pkg.add_employee" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_core.employee_pkg.add_employee" -> "schema_util_common.logger_pkg.log_message" [color=lightgray]
+	"schema_app_core.employee_pkg.add_employee" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_core.employee_pkg.get_employee" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_core.employee_pkg.get_employee" -> "schema_app_core.employee_pkg.get_employee_raw_data" [color=lightgray]
+	"schema_app_core.employee_pkg.update_employee_info" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_core.employee_pkg.get_manager_name" -> "schema_app_core.employee_pkg.get_employee_raw_data" [color=lightgray]
+	"schema_app_core.project_pkg.create_project" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_core.project_pkg.create_project" -> "schema_app_core.employee_pkg.get_employee" [color=lightgray]
+	"schema_app_core.project_pkg.create_project" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_core.project_pkg.assign_employee_to_project" -> "schema_app_core.employee_pkg.get_employee" [color=lightgray]
+	"schema_app_core.project_pkg.assign_employee_to_project" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_finance.invoice_pkg.create_invoice_for_project" -> "schema_app_core.project_pkg.get_project_details" [color=lightgray]
+	"schema_app_finance.invoice_pkg.create_invoice_for_project" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_finance.invoice_pkg.create_invoice_for_project" -> "schema_util_common.logger_pkg.log_message" [color=lightgray]
+	"schema_app_finance.invoice_pkg.send_invoice" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_finance.invoice_pkg.send_invoice" -> "schema_app_finance.invoice_pkg.dummy_utl_http_call" [color=lightgray]
+	"schema_app_finance.invoice_pkg.send_invoice" -> "schema_app_finance.invoice_pkg.dummy_utl_file_write" [color=lightgray]
+	"schema_app_finance.invoice_pkg.send_invoice" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_finance.invoice_pkg.send_invoice" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_util_common.logger_pkg.log_debug" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_app_core.employee_pkg.get_employee" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_util_common.date_utils_pkg.format_date-054b37e737f9871afbc8dec8f3b3a2fc6ecf296aa26cc4ab64a9e44823a87411" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_app_finance.payroll_pkg.calculate_tax-4412c2d4ec4b62febba3a3a5bfc7a2503de192c35a1c7c832cb10473b9312c1a" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_app_finance.payroll_pkg.calculate_tax-8068f7961cd98d57dc614a4b68d716c112365ce1bb8bef95269db41be88beda5" [color=lightgray]
+	"schema_app_finance.payroll_pkg.process_employee_payroll" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_finance.payroll_pkg.calculate_tax-8068f7961cd98d57dc614a4b68d716c112365ce1bb8bef95269db41be88beda5" -> "schema_util_common.string_utils_pkg.to_title_case" [color=lightgray]
+	"schema_app_finance.payroll_pkg.generate_payslip" -> "schema_app_finance.payroll_pkg.process_employee_payroll" [color=lightgray]
+	"schema_app_finance.payroll_pkg.generate_payslip" -> "schema_util_common.logger_pkg.log_info" [color=lightgray]
+	"schema_app_finance.payroll_pkg.generate_payslip" -> "schema_util_common.date_utils_pkg.format_date-4d8017a27ba885c78e8802d546a9ed252cd8860374f1a852a3392e3a5f41df48" [color=lightgray]
+	"schema_util_common.date_utils_pkg.add_business_days" -> "schema_util_common.logger_pkg.log_error" [color=lightgray]
+	"schema_util_common.date_utils_pkg.format_date-4d8017a27ba885c78e8802d546a9ed252cd8860374f1a852a3392e3a5f41df48" -> "schema_util_common.date_utils_pkg.format_date-054b37e737f9871afbc8dec8f3b3a2fc6ecf296aa26cc4ab64a9e44823a87411" [color=lightgray]
+	"schema_util_common.logger_pkg.log_debug" -> "schema_util_common.logger_pkg.log_message" [color=lightgray]
+	"schema_util_common.logger_pkg.log_error" -> "schema_util_common.logger_pkg.log_message" [color=lightgray]
+	subgraph cluster_legend {
+		color=gray fillcolor="#f8f8f8" fontname=Arial fontsize=14 label="Legend - Node Types" labelloc=t style="filled,rounded"
+		node [fontname=Arial fontsize=10]
+		legend_UNKNOWN [label=UNKNOWN fillcolor=lightgray shape=ellipse style=filled]
+		legend_function [label=function fillcolor=lightblue shape=ellipse style=filled]
+		legend_procedure [label=procedure fillcolor=cyan shape=ellipse style=filled]
+		legend_UNKNOWN -> legend_function [style=invis]
+		legend_function -> legend_procedure [style=invis]
+	}
+	fontsize=20 label="Call Graph" labelloc=t
+}

@@ -23,6 +23,7 @@ applyTo: '**'
     *   Unit tests should be placed in a `tests` subdirectory within the package or module they are testing (e.g., `packages/dependency_analyzer/src/dependency_analyzer/tests/`).
     *   Integration tests can be placed in a top-level `tests/integration` directory or a relevant package-level `tests` directory.
     *   Strive for high test coverage for new and modified code.
+    *   Use `uv` for running tests, eg: `uv run pytest <path_to_tests>` or `uv run pytest <path_to_tests>::<test_name>`.
 
 4.  **Code Style and Formatting**:
     *   Adhere to PEP 8 style guidelines.
@@ -37,35 +38,31 @@ applyTo: '**'
     *   Write clear and comprehensive docstrings for all public modules, classes, functions, and methods.
     *   Follow a consistent docstring format (e.g., Google, NumPy, or reStructuredText).
 
-7.  **Commit Messages**:
-    *   Follow the Conventional Commits specification for writing commit messages. This helps in automating changelog generation and makes the commit history more readable.
-    *   Example: `feat(profiler): make profiler optional via config`
-
-8.  **Modularity and Single Responsibility**:
+7.  **Modularity and Single Responsibility**:
     *   Design functions and classes to be small, focused, and adhere to the Single Responsibility Principle (SRP).
     *   Aim for high cohesion and low coupling between modules.
 
-9.  **Configuration Management**:
+8.  **Configuration Management**:
     *   Prefer external configuration (e.g., environment variables, configuration files like TOML or YAML) over hardcoding values directly in the code.
     *   Centralize configuration access, similar to the existing `config.py` pattern.
 
-10. **Error Handling**:
+9. **Error Handling**:
     *   Implement robust error handling using specific exception types.
     *   Avoid catching generic `Exception` unless absolutely necessary and re-raising or logging appropriately.
     *   Provide informative error messages.
 
-11. **Dependency Management**:
+10. **Dependency Management**:
     *   Manage project dependencies using `pyproject.toml` (e.g., with Poetry or PDM) or a well-maintained `requirements.txt` file.
     *   Pin dependency versions to ensure reproducible builds.
 
-12. **Security**:
+11. **Security**:
     *   Be mindful of security best practices (e.g., avoid hardcoding secrets, sanitize inputs, be cautious with external process calls).
     *   Regularly update dependencies to patch security vulnerabilities.
 
-13. **Resource Management**:
+12. **Resource Management**:
     *   Ensure proper management of resources like file handles, database connections, and network sockets, typically using `with` statements.
 
-14. **Clarity and Readability**:
+13. **Clarity and Readability**:
     *   Prioritize writing code that is clear, readable, and maintainable.
     *   Use meaningful variable and function names.
     *   Add comments to explain complex logic or non-obvious decisions.

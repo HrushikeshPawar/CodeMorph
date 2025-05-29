@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import loguru as lg
 import pyparsing as pp
-from typing import List, Tuple, Dict, NamedTuple
+from typing import List, Optional, Tuple, Dict, NamedTuple
 
 from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
@@ -36,6 +36,7 @@ class CallDetailExtractor:
         self.temp_extracted_calls_list: List[Tuple[str, int]] = []
         self.code_string_for_parsing = "" # Renamed for clarity
         self.cleaned_code = ""
+        self.allow_parameterless_config: bool = False # Default to False
         self._setup_parser()
 
     def _reset_internal_state(self):
@@ -192,7 +193,7 @@ class CallDetailExtractor:
         self.logger.debug(f"Found {len(extracted_calls_list)} potential calls in code block.")
         return extracted_calls_list
 
-    def _extract_call_params(self, call_info: ExtractedCallTuple) -> CallParameterTuple:
+    def _extract_call_params(self, call_info: ExtractedCallTuple) -> Optional[CallParameterTuple]:
         """
         Extracts parameters for a given call from the cleaned code.
         Based on the user-provided `extract_call_params` function.
@@ -218,8 +219,12 @@ class CallDetailExtractor:
         if current_idx >= len(self.cleaned_code) or self.cleaned_code[current_idx] != '(':
             # No opening parenthesis found, likely a parameter-less call (e.g., my_proc; or USER)
             # Or a call like SYSDATE (which might not have `()` in all contexts but pyparsing matched `SEMI` implicitly or explicitly)
-            self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx}. Assuming parameter-less.")
-            return CallParameterTuple([], {})
+            if not self.allow_parameterless_config:
+                self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx} and allow_parameterless is False. Skipping call.")
+                return None # Indicate skipping this call
+            else:
+                self.logger.trace(f"No opening parenthesis found for '{call_info.call_name}' at index {current_idx}. Assuming parameter-less as allow_parameterless is True.")
+                return CallParameterTuple([], {})
 
         # We found '(', so start parsing parameters
         param_nested_lvl = 1 # We are inside the first level of parentheses
@@ -304,13 +309,14 @@ class CallDetailExtractor:
 
         return CallParameterTuple(restored_positional_params, restored_named_params)
 
-    def extract_calls_with_details(self, cleaned_plsql_code: str, literal_mapping: Dict[str, str]) -> List[CallDetailsTuple]:
+    def extract_calls_with_details(self, cleaned_plsql_code: str, literal_mapping: Dict[str, str], allow_parameterless: bool = False) -> List[CallDetailsTuple]:
         """
         Main public method to extract all procedure/function calls with their parameters.
         
         Args:
             cleaned_plsql_code: Pre-cleaned code with literals replaced with placeholders
             literal_mapping: Mapping of literal placeholders to their original values
+            allow_parameterless: If False, calls without parentheses (e.g. `my_proc;`) will be skipped. Defaults to True.
             
         Returns:
             List of CallDetailsTuple objects representing all extracted calls
@@ -319,6 +325,8 @@ class CallDetailExtractor:
         
         # Reset Parser
         self._reset_internal_state()
+
+        self.allow_parameterless_config = allow_parameterless # Store the config
         
         self.cleaned_code = cleaned_plsql_code
         self.literal_mapping = literal_mapping
@@ -339,7 +347,12 @@ class CallDetailExtractor:
             # call_info.end_idx is the index *after* the call name in cleaned_code.
             
             parameter_tuple = self._extract_call_params(call_info)
-            
+
+            if parameter_tuple is None: # This call should be skipped
+                self.logger.trace(f"Skipping call '{call_info.call_name}' due to parameter extraction result (None).")
+                continue
+
+            # Create a CallDetailsTuple with the extracted call and its parameters
             detailed_calls_list.append(
                 CallDetailsTuple(
                     call_name=call_info.call_name,

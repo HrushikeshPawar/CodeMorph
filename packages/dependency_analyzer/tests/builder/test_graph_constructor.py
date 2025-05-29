@@ -160,17 +160,20 @@ def test_out_of_scope_call_creates_placeholder(da_test_logger: lg.Logger):
     assert graph.has_node("mypkg.caller")
     assert graph.has_node("external_pkg.non_existent_proc") # Placeholder for qualified
     
-    placeholder_node_data = graph.nodes["external_pkg.non_existent_proc"]['object']
-    assert isinstance(placeholder_node_data, PLSQL_CodeObject)
-    assert placeholder_node_data.name == "non_existent_proc"
-    assert placeholder_node_data.package_name == "external_pkg"
-    assert placeholder_node_data.type == CodeObjectType.UNKNOWN
+    # Check placeholder node attributes in structure-only mode
+    placeholder_node_data = graph.nodes["external_pkg.non_existent_proc"]
+    assert placeholder_node_data['name'] == "non_existent_proc"
+    assert placeholder_node_data['package_name'] == "external_pkg"
+    assert placeholder_node_data['type'] == "UNKNOWN"
 
     assert graph.has_edge("mypkg.caller", "external_pkg.non_existent_proc")
     
     # Check out_of_scope_calls set
+    # should be recorded as not_found reason
     assert "external_pkg.non_existent_proc" in out_of_scope
-    assert "completely_unknown_proc" in out_of_scope # Non-qualified unknown is also out of scope
+    assert out_of_scope["external_pkg.non_existent_proc"] == "not_found"
+    assert "completely_unknown_proc" in out_of_scope  # Non-qualified unknown is also out of scope
+    assert out_of_scope["completely_unknown_proc"] == "not_found"
 
 def test_self_loop_skipped(da_test_logger: lg.Logger):
     obj_self = MockPLSQLCodeObject(name="self_caller", package_name="pkg_self", type=CodeObjectType.PROCEDURE, id="pkg_self.self_caller")
@@ -356,7 +359,7 @@ def test_overloaded_call_successful_resolution(overloaded_code_objects, da_test_
     
     # The call ("pkg_over.over_proc", pos_params=["text_for_v1", "extra_param"]) should fail or be ambiguous
     # and thus added to out_of_scope
-    failed_overload_call_sig = "pkg_over.over_proc (overloaded, resolution_failed: CallDetailsTuple(call_name='pkg_over.over_proc', line_no=1, start_idx=0, end_idx=0, positional_params=[], named_params={}))"
+    failed_overload_call_sig = "pkg_over.over_proc"
     assert any(failed_overload_call_sig.strip('"') in item for item in out_of_scope), f"Expected failed overload not in out_of_scope. Got: {out_of_scope}"
 
 def test_overloaded_call_no_matching_signature(da_test_logger: lg.Logger):
@@ -370,8 +373,7 @@ def test_overloaded_call_no_matching_signature(da_test_logger: lg.Logger):
     constructor = GraphConstructor(code_objects=[caller, over_cand1, over_cand2], logger=da_test_logger)
     _, out_of_scope = constructor.build_graph()
     
-    expected_oos_detail = "CallDetailsTuple(call_name='pkg.my_over_proc', line_no=1, start_idx=0, end_idx=0, positional_params=[], named_params={})"
-    expected_oos_entry_part = f"pkg.my_over_proc (overloaded, resolution_failed: {expected_oos_detail})"
+    expected_oos_entry_part = "pkg.my_over_proc"
     
     assert any(expected_oos_entry_part in item for item in out_of_scope), f"Expected unresolved overload not in out_of_scope. Got: {out_of_scope}"
 
@@ -393,11 +395,11 @@ def test_object_with_no_clean_code_handling(da_test_logger: lg.Logger):
     assert not graph.has_edge("pkg_test.no_code_proc", "some_pkg.some_overloaded_proc_v1")
     
     # The calls should be added to out_of_scope with a specific reason
-    assert "some_pkg.some_overloaded_proc (overloaded, source_unavailable)" in out_of_scope or \
-           "some_pkg.some_overloaded_proc (source_unavailable_for_params)" in out_of_scope # Check for either log message variant
+    assert "some_pkg.some_overloaded_proc" in out_of_scope or \
+           "some_pkg.some_overloaded_proc" in out_of_scope # Check for either log message variant
     
     # The non-overloaded call "another_call" will also be out of scope as it's not defined
-    assert "another_call (source_unavailable_for_params)" in out_of_scope
+    assert "another_call" in out_of_scope
 
 def test_call_to_skipped_name(da_test_logger: lg.Logger):
     # Setup: global_dup1 and global_dup2 create an ambiguous "global_dup"
@@ -413,8 +415,35 @@ def test_call_to_skipped_name(da_test_logger: lg.Logger):
     assert "global_dup" in constructor._skip_call_names # Ensure it was skipped
     assert not graph.has_edge("any_pkg.caller_of_dup", "global_dup_1")
     assert not graph.has_edge("any_pkg.caller_of_dup", "global_dup_2")
-    # The call 'global_dup' from caller_of_dup should be in out_of_scope because 'global_dup' is ambiguous
+    # The call 'global_dup' should be recorded with the ambiguous_global_definition reason
     assert "global_dup" in out_of_scope
+    assert out_of_scope["global_dup"] == "ambiguous_global_definition"
+
+def test_skip_ambiguous_intermediate_names_and_resolution(da_test_logger: lg.Logger):
+    """
+    When two non-overloaded objects share the same intermediate qualified name, it should be skipped
+    and calls to that intermediate name become out-of-scope.
+    """
+    # Two procs in pkg.sub.proc with different IDs (same simple name -> same intermediate)
+    obj1 = MockPLSQLCodeObject(name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc1")
+    obj2 = MockPLSQLCodeObject(name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc2")
+    constructor = GraphConstructor(code_objects=[obj1, obj2], logger=da_test_logger)
+    constructor._initialize_lookup_structures()
+    # Intermediate "sub.proc" under parent "pkg" should be marked ambiguous
+    skip_set = constructor._skip_intermediate_names.get("pkg", set())
+    assert "sub.proc" in skip_set
+    # The intermediate should not be registered
+    normal_map = constructor._package_wise_code_object_names.get("pkg", {}).get("normal", {})
+    assert "sub.proc" not in normal_map
+
+    # Now resolution: a caller in pkg calling "sub.proc" should not resolve
+    caller = MockPLSQLCodeObject(name="caller", package_name="pkg", type=CodeObjectType.PROCEDURE, id="pkg.caller")
+    caller.add_call("sub.proc")
+    graph, out_of_scope = GraphConstructor(code_objects=[obj1, obj2, caller], logger=da_test_logger).build_graph()
+    assert "sub.proc" in out_of_scope
+    # No edge created for ambiguous intermediate
+    assert not graph.has_edge("pkg.caller", "pkg.sub.proc1")
+    assert not graph.has_edge("pkg.caller", "pkg.sub.proc2")
 
 # --- Tests for build_graph (incorporating _resolve_and_add_dependencies_for_call) ---
 
@@ -497,10 +526,40 @@ def test_build_graph_out_of_scope_and_placeholder(da_test_logger: lg.Logger):
     assert "unknown_pkg.unknown_proc" in out_of_scope
     assert "local_unknown" in out_of_scope
     assert graph.has_node("unknown_pkg.unknown_proc") # Placeholder created
-    assert graph.nodes["unknown_pkg.unknown_proc"]['object'].type == CodeObjectType.UNKNOWN
+    assert graph.nodes["unknown_pkg.unknown_proc"]['type'] == "UNKNOWN"
     assert graph.has_edge(caller.id, "unknown_pkg.unknown_proc")
-    assert not graph.has_node("local_unknown") # No placeholder for unqualified unknown
-    da_test_logger.info("Passed: test_build_graph_out_of_scope_and_placeholder")
+
+def test_initialize_lookup_structures_intermediate_names(da_test_logger: lg.Logger):
+    """
+    Test that intermediate qualified names (e.g., 'sub.proc') are registered under parent package context.
+    """
+    # Object in nested package pkg.sub.proc
+    nested_obj = MockPLSQLCodeObject(
+        name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc"
+    )
+    constructor = GraphConstructor(code_objects=[nested_obj], logger=da_test_logger)
+    constructor._initialize_lookup_structures()
+
+    # Simple name under its own context
+    assert "proc" in constructor._package_wise_code_object_names.get("pkg.sub", {}).get("normal", {})
+    # Intermediate name under parent context
+    parent_map = constructor._package_wise_code_object_names.get("pkg", {}).get("normal", {})
+    assert "sub.proc" in parent_map, f"Expected 'sub.proc' in pkg.normal map, got {parent_map.keys()}"
+    assert parent_map["sub.proc"].id == nested_obj.id
+
+def test_intermediate_name_resolution(da_test_logger: lg.Logger):
+    """
+    Test resolution of calls using intermediate qualified names in package-local lookup.
+    """
+    # Caller in pkg, target in pkg.sub.proc
+    
+    caller = MockPLSQLCodeObject(name="main", package_name="pkg", type=CodeObjectType.PROCEDURE, id="pkg.main")
+    target = MockPLSQLCodeObject(name="proc", package_name="pkg.sub", type=CodeObjectType.PROCEDURE, id="pkg.sub.proc")
+    caller.add_call("sub.proc")  # Call using intermediate qualified name
+    constructor = GraphConstructor(code_objects=[caller, target], logger=da_test_logger)
+    graph, out_of_scope = constructor.build_graph()
+    assert not out_of_scope, f"Intermediate name resolution failed, out_of_scope: {out_of_scope}"
+    assert graph.has_edge(caller.id, target.id)
 
 def test_build_graph_call_to_skipped_name_is_out_of_scope(da_test_logger: lg.Logger):
     # Setup a skipped name
@@ -538,8 +597,34 @@ def test_build_graph_complex_overload_resolution(da_test_logger: lg.Logger):
     assert graph.has_edge(caller.id, util_proc_v1.id)
     assert graph.has_edge(caller.id, util_proc_v2.id)
     assert graph.has_edge(caller.id, util_proc_v3.id)
-    
-    failed_call_detail_str = "CallDetailsTuple(call_name='app.util.process_data', line_no=1, start_idx=0, end_idx=0, positional_params=['true'], named_params={})"
-    expected_oos_entry = f"app.util.process_data (overloaded, resolution_failed: {failed_call_detail_str})"
+
+    expected_oos_entry = "app.util.process_data"
     assert any(expected_oos_entry in item for item in out_of_scope), f"Expected failed overload not in out_of_scope. Got: {out_of_scope}"
     da_test_logger.info("Passed: test_build_graph_complex_overload_resolution")
+
+# In test_graph_constructor.py
+def test_global_suffix_match_resolution(da_test_logger: lg.Logger):
+    """
+    Test that a call using an abbreviated FQN suffix can be resolved globally.
+    e.g., call 'sub_pkg.proc' resolves to 'main_pkg.sub_pkg.proc'.
+    """
+    target_obj = MockPLSQLCodeObject(
+        name="proc", 
+        package_name="main_pkg.sub_pkg", 
+        type=CodeObjectType.PROCEDURE, 
+        id="main_pkg.sub_pkg.proc"
+    )
+    caller_obj = MockPLSQLCodeObject(
+        name="caller", 
+        package_name="another_pkg", 
+        type=CodeObjectType.PROCEDURE, 
+        id="another_pkg.caller"
+    )
+    caller_obj.add_call("sub_pkg.proc") # Call using suffix
+
+    constructor = GraphConstructor(code_objects=[target_obj, caller_obj], logger=da_test_logger)
+    graph, out_of_scope = constructor.build_graph()
+
+    assert not out_of_scope, f"Suffix match resolution failed, out_of_scope: {out_of_scope}"
+    assert graph.has_edge(caller_obj.id, target_obj.id)
+    da_test_logger.info("Passed: test_global_suffix_match_resolution")

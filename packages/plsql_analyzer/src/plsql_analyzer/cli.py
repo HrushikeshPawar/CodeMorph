@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, List, Sequence, Annotated, TYPE_CHECKING
 from cyclopts import App, Parameter, validators, Token
 
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 from plsql_analyzer.utils.logging_setup import configure_logger
 from plsql_analyzer.utils.file_helpers import FileHelpers
 from plsql_analyzer.persistence.database_manager import DatabaseManager
@@ -85,11 +85,11 @@ def parse(
     merged_config_data = {**config_data, **cli_args_provided}
     logger = None
     try:
-        app_config = AppConfig(**merged_config_data)
+        app_config = PLSQLAnalyzerSettings(**merged_config_data)
 
-        # Configure logger using AppConfig
+        # Configure logger using PLSQLAnalyzerSettings
         logger: Logger = configure_logger(app_config.log_verbose_level, app_config.logs_dir)
-        logger.info("Logger configured based on AppConfig.")
+        logger.info("Logger configured based on PLSQLAnalyzerSettings.")
         logger.info("Application Started.")
         logger.info(f"Artifacts will be stored in: {app_config.artifacts_dir}")
         logger.info(f"Source code configured from: {app_config.source_code_root_dir}")
@@ -101,15 +101,15 @@ def parse(
 
     except Exception as e:
         if logger:
-            logger.critical("Error initializing AppConfig or running analysis.")
+            logger.critical("Error initializing PLSQLAnalyzerSettings or running analysis.")
             logger.exception(e)
         else:
-            print("Error initializing AppConfig or running analysis.")
+            print("Error initializing PLSQLAnalyzerSettings or running analysis.")
             print(e)
         return
 
 
-def run_plsql_analyzer(app_config: AppConfig, logger:'Logger'):
+def run_plsql_analyzer(app_config: PLSQLAnalyzerSettings, logger:'Logger'):
     logger.info(f"Starting PL/SQL analysis with source: {app_config.source_code_root_dir}")
     
     if app_config.enable_profiler:
@@ -144,7 +144,7 @@ def run_plsql_analyzer(app_config: AppConfig, logger:'Logger'):
 
     # 4. Initialize and Run the Extraction Workflow
     workflow = ExtractionWorkflow(
-        config=app_config, # Pass the AppConfig instance
+        config=app_config, # Pass the PLSQLAnalyzerSettings instance
         logger=logger,
         db_manager=db_manager,
         structural_parser=structural_parser,

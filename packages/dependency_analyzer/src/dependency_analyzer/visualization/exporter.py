@@ -8,20 +8,22 @@ import loguru as lg
 import networkx as nx
 from typing import Optional
 import graphviz as gv
-from pyvis.network import Network as PyvisNetwork
 from plsql_analyzer.core.code_object import CodeObjectType, PLSQL_CodeObject
 
 
 def to_graphviz(
     graph: nx.DiGraph,
-    logger:lg.Logger,
+    logger: lg.Logger,
     with_package_name: bool = False,
+    show_legend: bool = True,
 ) -> gv.Digraph:
     """
     Convert a networkx.DiGraph to a graphviz.Digraph for visualization.
     Args:
         graph: The dependency graph (networkx.DiGraph).
+        logger: Logger instance for logging operations.
         with_package_name: If True, include package name in node labels.
+        show_legend: If True, include a legend showing node type colors.
     Returns:
         graphviz.Digraph object.
     """
@@ -36,47 +38,36 @@ def to_graphviz(
 
     # Define colors and shapes based on CodeObjectType
     type_colors = {
-        CodeObjectType.PACKAGE: "#4472C4",   # Blue
-        CodeObjectType.PROCEDURE: "#ED7D31",  # Orange
-        CodeObjectType.FUNCTION: "#70AD47",   # Green
-        CodeObjectType.TRIGGER: "#5B9BD5",    # Light blue
+        CodeObjectType.PACKAGE: "#ED7D31",  # Orange
+        CodeObjectType.PROCEDURE: "cyan",   # Blue
+        CodeObjectType.FUNCTION: "lightblue",    # Light blue
+        CodeObjectType.TRIGGER: "#70AD47",   # Green
         CodeObjectType.TYPE: "#FFC000",       # Yellow
-        CodeObjectType.UNKNOWN: "#D3D3D3",    # Light gray
+        CodeObjectType.UNKNOWN: "lightgray",    # Light gray
     }
     
-    type_shapes = {
-        CodeObjectType.PACKAGE: "box",
-        CodeObjectType.PROCEDURE: "ellipse",
-        CodeObjectType.FUNCTION: "diamond",
-        CodeObjectType.TRIGGER: "hexagon",
-        CodeObjectType.TYPE: "parallelogram",
-        CodeObjectType.UNKNOWN: "ellipse",    # Default shape but with dotted border
-    }
-
+    # Iterate over nodes to add them to the graph
+    logger.debug(f"Adding nodes to Graphviz graph - Total nodes: {len(graph.nodes)}")
     for node in graph.nodes:
+
         node_data = graph.nodes[node]
-        if 'object' not in node_data:
-            excluded_node_id.append(node)
-            logger.warning(f"Node '{node}' missing 'object' attribute. Excluding from visualization.")
-            continue
-        
-        code_object: PLSQL_CodeObject = node_data['object']
-        object_type = code_object.type
-        package_name = code_object.package_name
+        name = node_data["name"]
+        object_type = node_data["type"]
+        package_name = node_data["package_name"]
         
         # Get color and shape based on CodeObjectType
         color = type_colors.get(object_type, type_colors[CodeObjectType.UNKNOWN])
-        shape = type_shapes.get(object_type, type_shapes[CodeObjectType.UNKNOWN])
+        shape = "ellipse"
         
         # Set node label
         if with_package_name:
-            label = f"{code_object.name}\n({package_name})"
+            label = f"{name}\n({package_name})"
         else:
-            label = code_object.name
+            label = name
         
         # Special handling for UNKNOWN type - dotted border
         if object_type == CodeObjectType.UNKNOWN:
-            graphviz_dependency_graph.node(node, label=label, color=color, shape=shape, style='dashed, filled')
+            graphviz_dependency_graph.node(node, label=label, fillcolor=color, shape=shape, style='dashed, filled')
         else:
             graphviz_dependency_graph.node(node, label=label, color=color, shape=shape)
         
@@ -96,116 +87,89 @@ def to_graphviz(
         logger.trace(f"Added edge '{source_node_id} -> {target_node_id}' to Graphviz graph.")
 
     logger.info("Graphviz export completed.")
+    
+    # Add legend if requested
+    if show_legend:
+        _add_legend_to_graph(graphviz_dependency_graph, graph, type_colors, logger)
+    
     return graphviz_dependency_graph
 
 
-def to_pyvis(
-    graph: nx.DiGraph,
-    logger:lg.Logger,
-    with_package_name: bool = False,
-    notebook: bool = False,
-    pyvis_kwargs: Optional[dict] = None,
-) -> PyvisNetwork:
+def _add_legend_to_graph(
+    graphviz_graph: gv.Digraph,
+    original_graph: nx.DiGraph,
+    type_colors: dict,
+    logger: lg.Logger
+) -> None:
     """
-    Convert a networkx.DiGraph to a pyvis Network for interactive visualization.
+    Add a legend cluster to the Graphviz graph showing node type colors.
+    
     Args:
-        graph: The dependency graph (networkx.DiGraph).
-        with_package_name: If True, include package name in node labels.
-        notebook: If True, enables notebook mode for inline display.
-        pyvis_kwargs: Additional kwargs for pyvis Network constructor.
-    Returns:
-        pyvis.network.Network object.
+        graphviz_graph: The Graphviz digraph to add legend to.
+        original_graph: The original NetworkX graph to analyze for present types.
+        type_colors: Dictionary mapping CodeObjectType to colors.
+        logger: Logger instance for logging operations.
     """
+    logger.debug("Adding legend to Graphviz graph.")
     
-    logger = logger.bind(exporter_type="Pyvis")
-    logger.debug("Starting Pyvis export.")
-    pyvis_kwargs = pyvis_kwargs or {}
-    net = PyvisNetwork(notebook=notebook, directed=True, **pyvis_kwargs)
-    net.barnes_hut()  # Enable physics for better layout
-
-    excluded_node_id = []
-
-    # Define colors and shapes based on CodeObjectType
-    type_colors = {
-        CodeObjectType.PACKAGE: {"background": "#4472C4", "border": "#2A4D7F"},   # Blue
-        CodeObjectType.PROCEDURE: {"background": "#ED7D31", "border": "#C05F1A"},  # Orange
-        CodeObjectType.FUNCTION: {"background": "#70AD47", "border": "#507B33"},   # Green
-        CodeObjectType.TRIGGER: {"background": "#5B9BD5", "border": "#3F6E99"},    # Light blue
-        CodeObjectType.TYPE: {"background": "#FFC000", "border": "#CC9B00"},       # Yellow
-        CodeObjectType.UNKNOWN: {"background": "#D3D3D3", "border": "#A9A9A9"},    # Light gray
-    }
+    # Determine which CodeObjectTypes are actually present in the graph
+    present_types = set()
+    for node_data in original_graph.nodes.values():
+        object_type = node_data.get("type")
+        if object_type:
+            present_types.add(object_type)
     
-    type_shapes = {
-        CodeObjectType.PACKAGE: "box",
-        CodeObjectType.PROCEDURE: "ellipse",
-        CodeObjectType.FUNCTION: "diamond",
-        CodeObjectType.TRIGGER: "hexagon",
-        CodeObjectType.TYPE: "star",
-        CodeObjectType.UNKNOWN: "ellipse",    # Default shape
-    }
-
-    for node in graph.nodes:
-        node_data = graph.nodes[node]
-        if 'object' not in node_data:
-            excluded_node_id.append(node)
-            logger.warning(f"Node '{node}' missing 'object' attribute. Excluding from Pyvis visualization.")
-            continue
+    if not present_types:
+        logger.debug("No node types found in graph. Skipping legend creation.")
+        return
+    
+    # Create legend cluster
+    with graphviz_graph.subgraph(name='cluster_legend') as legend:
+        legend.attr(
+            label='Legend - Node Types',
+            style='filled,rounded',
+            color='gray',
+            fillcolor='#f8f8f8',
+            fontname='Arial',
+            fontsize='14',
+            labelloc='t'
+        )
+        legend.attr('node', fontname='Arial', fontsize='10')
         
-        code_object: PLSQL_CodeObject = node_data['object']
-        object_type = code_object.type
-        package_name = code_object.package_name
+        # Sort types for consistent ordering (convert to list and sort by name)
+        sorted_types = sorted(present_types, key=lambda t: t.value if hasattr(t, 'value') else str(t))
         
-        # Get color and shape based on CodeObjectType
-        color_set = type_colors.get(object_type, type_colors[CodeObjectType.UNKNOWN])
-        shape = type_shapes.get(object_type, type_shapes[CodeObjectType.UNKNOWN])
-        
-        # Set node label
-        if with_package_name:
-            label = f"{code_object.name}\n({package_name})"
-        else:
-            label = code_object.name
+        # Add legend node for each present type
+        for object_type in sorted_types:
+            color = type_colors.get(object_type, type_colors[CodeObjectType.UNKNOWN])
+            legend_node_id = f"legend_{object_type.value if hasattr(object_type, 'value') else str(object_type)}"
+            type_name = object_type.value if hasattr(object_type, 'value') else str(object_type)
             
-        # Use the label as the title since there's no 'signature' attribute in PLSQL_CodeObject
-        title = label
+            # Style legend nodes to match main graph nodes
+            if object_type == CodeObjectType.UNKNOWN:
+                legend.node(
+                    legend_node_id, 
+                    label=type_name,
+                    fillcolor=color,
+                    shape='ellipse',
+                    style='dashed,filled'
+                )
+            else:
+                legend.node(
+                    legend_node_id,
+                    label=type_name,
+                    fillcolor=color,  # Ensure fill color is set
+                    shape='ellipse',
+                    style='filled'
+                )
         
-        # Special handling for UNKNOWN type - dashed border
-        if object_type == CodeObjectType.UNKNOWN:
-            net.add_node(
-                node,
-                label=label,
-                color=color_set,
-                title=title,
-                shape=shape,
-                font={"face": "Arial", "size": 16},
-                borderWidth=2,
-                dashes=True  # This makes the border dashed in Pyvis
-            )
-        else:
-            net.add_node(
-                node,
-                label=label,
-                color=color_set,
-                title=title,
-                shape=shape,
-                font={"face": "Arial", "size": 16}
-            )
-            
-        logger.trace(f"Added node '{node}' to Pyvis network.")
-
-    for (source_node_id, target_node_id) in graph.edges:
-        if source_node_id in excluded_node_id or target_node_id in excluded_node_id:
-            continue
-            
-        # Get source node's object type for edge color
-        source_obj = graph.nodes[source_node_id].get('object')
-        source_code_object: Optional[PLSQL_CodeObject] = source_obj
-        source_type = source_code_object.type if source_code_object else CodeObjectType.UNKNOWN
-        edge_color = type_colors.get(source_type, type_colors[CodeObjectType.UNKNOWN])["border"]
-        
-        net.add_edge(source_node_id, target_node_id, color=edge_color)
-        logger.trace(f"Added edge '{source_node_id} -> {target_node_id}' to Pyvis network.")
-
-    logger.info("Pyvis export completed.")
-    return net
-
-# End of exporter.py
+        # Arrange legend items vertically using invisible edges
+        if len(sorted_types) > 1:
+            for i in range(len(sorted_types) - 1):
+                current_type = sorted_types[i]
+                next_type = sorted_types[i + 1]
+                current_id = f"legend_{current_type.value if hasattr(current_type, 'value') else str(current_type)}"
+                next_id = f"legend_{next_type.value if hasattr(next_type, 'value') else str(next_type)}"
+                legend.edge(current_id, next_id, style='invis')
+    
+    logger.debug(f"Legend added with {len(present_types)} node types: {[t.value if hasattr(t, 'value') else str(t) for t in sorted_types]}")

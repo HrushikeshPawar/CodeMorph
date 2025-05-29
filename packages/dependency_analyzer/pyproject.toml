@@ -13,12 +13,13 @@ dependencies = [
     "loguru>=0.7.3",
     "networkx>=3.4.2",
     "plsql-analyzer",
-    "pyvis>=0.3.2",
+    "pydantic>=2.11.4",
+    "tomlkit>=0.13.2",
     "tqdm>=4.67.1",
 ]
 
 [project.scripts]
-dependency-analyzer = "dependency_analyzer:main"
+dependency-analyzer = "dependency_analyzer.cli_app:app"
 
 [build-system]
 requires = ["hatchling"]

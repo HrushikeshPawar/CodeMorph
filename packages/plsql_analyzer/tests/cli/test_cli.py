@@ -8,7 +8,7 @@ from plsql_analyzer.settings import CALL_EXTRACTOR_KEYWORDS_TO_DROP
 
 @pytest.fixture
 def default_app_config_values():
-    # Provides default values from AppConfig for comparison
+    # Provides default values from PLSQLAnalyzerSettings for comparison
     # Note: source_code_root_dir is required and has no Pydantic default.
     return {
         "output_base_dir": str(Path("generated/artifacts").resolve()),
@@ -81,8 +81,8 @@ def test_cli_help_parse_command(capsys, mock_run_plsql_analyzer):
     assert "--exn" in std_out
     assert "--db-filename" in std_out
     assert "--dbf" in std_out
-    # log_file_prefix and log_trace_file_prefix are CLI args, not directly in AppConfig help text
-    # but their corresponding AppConfig fields might be if they existed.
+    # log_file_prefix and log_trace_file_prefix are CLI args, not directly in PLSQLAnalyzerSettings help text
+    # but their corresponding PLSQLAnalyzerSettings fields might be if they existed.
 
 def test_cli_parse_missing_source_dir_fails(capsys):
     with pytest.raises(SystemExit) as e:
@@ -238,7 +238,7 @@ def test_cli_empty_config_file(capsys, dummy_source_dir, tmp_path, mocker):
     cli_app(["parse", "--source-dir", str(dummy_source_dir), "--config-file", str(empty_config)])
     config = mock_run.call_args[0][0]
     
-    # Should use AppConfig defaults
+    # Should use PLSQLAnalyzerSettings defaults
     assert config.log_verbose_level == 1
     assert config.database_filename == "PLSQL_CodeObjects.db"
     assert config.file_extensions_to_include == ["sql"]
@@ -294,7 +294,7 @@ def test_force_reprocess_option(mocker, dummy_source_dir):
         "--force-reprocess", "/path/to/file2.sql"
     ])
     config = mock_run.call_args[0][0]  # First argument to run_plsql_analyzer
-    # The AppConfig should have the force_reprocess list with both files
+    # The PLSQLAnalyzerSettings should have the force_reprocess list with both files
     assert len(config.force_reprocess) == 2
     assert "/path/to/file1.sql" in config.force_reprocess
     assert "/path/to/file2.sql" in config.force_reprocess
@@ -311,7 +311,7 @@ def test_clear_history_for_file_option(mocker, dummy_source_dir):
     
     config = mock_run.call_args[0][0]
 
-    # The AppConfig should have the clear_history_for_file list with both files
+    # The PLSQLAnalyzerSettings should have the clear_history_for_file list with both files
     assert len(config.clear_history_for_file) == 2
     assert "processed/path/file1.sql" in config.clear_history_for_file
     assert "processed/path/file2.sql" in config.clear_history_for_file

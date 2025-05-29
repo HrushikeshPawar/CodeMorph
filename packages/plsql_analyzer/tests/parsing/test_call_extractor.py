@@ -159,7 +159,7 @@ def test_extract_calls_with_details(extractor:CallDetailExtractor, code, expecte
     """Tests the main public method with various PL/SQL snippets."""
 
     clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
-    results = extractor.extract_calls_with_details(clean_code, literal_map)
+    results = extractor.extract_calls_with_details(clean_code, literal_map, allow_parameterless=True)
     
     # Convert results to a comparable format (ignoring indices for simplicity in some cases if needed)
     # For now, compare everything including indices.
@@ -252,6 +252,125 @@ def test_unbalanced_parentheses_warning(extractor, caplog):
     # TODO: Should we do it?
     # assert results[0].named_params == {'b': '(c + d'} # The rest is consumed until end or error
     assert results[0].named_params == {} # For now this is what happens
+
+
+@pytest.mark.parametrize(
+    "code, allow_parameterless_setting, expected_call_details",
+    [
+        # Scenario: allow_parameterless = True
+        (
+            """
+            BEGIN
+                my_procedure_with_params(a => 1, b => 'test');
+                my_parameterless_proc;
+                another_proc(); -- Has parens
+                l_date := SYSDATE; -- Parameterless, no parens
+                dbms_output.put_line('hello');
+            END;
+            """,
+            True,
+            [
+                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=35, end_idx=59, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
+                CallDetailsTuple(call_name='my_parameterless_proc', line_no=4, start_idx=105, end_idx=126, positional_params=[], named_params={}),
+                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=144, end_idx=156, positional_params=[], named_params={}),
+                # CallDetailsTuple(call_name='SYSDATE', line_no=6, start_idx=42, end_idx=49, positional_params=[], named_params={}), Dropped by default drop_keywords_list
+                # CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}), Dropped by default drop_keywords_list
+            ]
+        ),
+        # Scenario: allow_parameterless = False
+        (
+            """
+            BEGIN
+                my_procedure_with_params(a => 1, b => 'test');
+                my_parameterless_proc;
+                another_proc(); -- Has parens
+                l_date := SYSDATE; -- Parameterless, no parens
+                dbms_output.put_line('hello');
+            END;
+            """,
+            False,
+            [
+                CallDetailsTuple(call_name='my_procedure_with_params', line_no=3, start_idx=35, end_idx=59, positional_params=[], named_params={'a': '1', 'b': "'test'"}),
+                CallDetailsTuple(call_name='another_proc', line_no=5, start_idx=144, end_idx=156, positional_params=[], named_params={}),
+                # my_parameterless_proc is skipped
+                # SYSDATE is skipped
+                # CallDetailsTuple(call_name="dbms_output.put_line", line_no=7, start_idx=31, end_idx=51, positional_params=["'hello'"], named_params={}), # Will be dropped as is in the default list of keywords
+            ]
+        ),
+        # Simpler case: only parameterless
+        (
+            "BEGIN my_proc; END;",
+            True,
+            [CallDetailsTuple('my_proc', 1, 6, 13, [], {})]
+        ),
+        (
+            "BEGIN my_proc; END;",
+            False,
+            []
+        ),
+        # Simpler case: only with parens
+        (
+            "BEGIN my_proc(); END;",
+            False, # Should still be found as it has parens
+            [CallDetailsTuple('my_proc', 1, 6, 13, [], {})]
+        ),
+        (
+            "BEGIN my_proc(); END;",
+            True, # Should still be found
+            [CallDetailsTuple('my_proc', 1, 6, 13, [], {})]
+        ),
+
+    ],
+    ids=[
+        "AllowTrue_MixedCalls",
+        "AllowFalse_MixedCalls",
+        "AllowTrue_OnlyParameterless",
+        "AllowFalse_OnlyParameterless",
+        "AllowFalse_WithParens",
+        "AllowTrue_WithParens",
+    ]
+)
+def test_extract_calls_parameterless_handling(extractor: CallDetailExtractor, code: str, allow_parameterless_setting: bool, expected_call_details: List[CallDetailsTuple]):
+    """
+    Tests how CallDetailExtractor.extract_calls_with_details handles parameterless calls
+    based on the allow_parameterless argument.
+    """
+    clean_code, literal_map = clean_code_and_map_literals(code, extractor.logger)
+    
+    # extractor.allow_parameterless_config will be set internally by extract_calls_with_details
+    results = extractor.extract_calls_with_details(
+        clean_code, literal_map, allow_parameterless=allow_parameterless_setting
+    )
+
+    assert len(results) == len(expected_call_details), f"Expected {len(expected_call_details)} calls but got {len(results)}. Results: {results}"
+
+    # For detailed comparison, we can compare each field.
+    # The provided expected_call_details have line numbers and indices relative to the *cleaned* code.
+    # The cleaning process itself might slightly alter exact line numbers and indices from the raw input `code`.
+    # The test setup for `expected_call_details` needs to be based on the cleaned version of the code.
+    # Let's adjust the line numbers and indices in expected_call_details based on the provided `code` snippet.
+
+    # The line numbers in the test case are relative to the BEGIN/END block.
+    # `clean_code_and_map_literals` might remove leading/trailing whitespace, affecting absolute indices.
+    # `extract_calls_with_details` reports line numbers from the `cleaned_code`.
+
+    # For the purpose of this test, the line numbers and indices in `expected_call_details`
+    # are assumed to be correct for the `cleaned_code` version of the input strings.
+    # If there are discrepancies, these would need careful recalculation based on how `clean_code_and_map_literals`
+    # transforms the input.
+
+    for i, (actual_call, expected_call) in enumerate(zip(results, expected_call_details)):
+        assert actual_call.call_name == expected_call.call_name, f"Call name mismatch at index {i}"
+        # For parameterless calls, params should be empty
+        assert actual_call.positional_params == expected_call.positional_params, f"Positional params mismatch for {actual_call.call_name}"
+        assert actual_call.named_params == expected_call.named_params, f"Named params mismatch for {actual_call.call_name}"
+        
+        # Line numbers and indices can be tricky if cleaning changes the structure significantly.
+        # The test cases assume that the provided line numbers/indices in `expected_call_details`
+        # are correct for the `cleaned_code`.
+        assert actual_call.line_no == expected_call.line_no, f"Line number mismatch for {actual_call.call_name}"
+        assert actual_call.start_idx == expected_call.start_idx, f"Start index mismatch for {actual_call.call_name}"
+        assert actual_call.end_idx == expected_call.end_idx, f"End index mismatch for {actual_call.call_name}"
 
 def test_parameter_parsing_edge_cases(extractor: CallDetailExtractor):
     """ Test edge cases in parameter parsing """

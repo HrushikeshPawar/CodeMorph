@@ -9,11 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 import networkx as nx
 import loguru as lg
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 import json
-
-from dependency_analyzer.utils.database_loader import DatabaseLoader
-from plsql_analyzer.core.code_object import PLSQL_CodeObject
 
 
 
@@ -27,9 +24,9 @@ class GraphStorage:
     - gexf: XML-based format (optimized for Gephi visualization)
     - json: JSON node-link format (web-compatible)
     
-    Provides specialized methods for handling graphs with PLSQL_CodeObject data:
-    - save_structure_only: Saves only the graph topology (nodes and edges)
-    - load_and_populate: Loads a graph and populates it with PLSQL_CodeObjects from a database
+    Works with structure-only graphs (nodes store attributes like ID, name, type, package, metrics,
+    but not full PLSQL_CodeObject instances). Provides rehydration capability for when full
+    objects are needed.
     """
 
     def __init__(self, logger: lg.Logger):
@@ -49,7 +46,7 @@ class GraphStorage:
         Save a NetworkX DiGraph to a file in the specified format.
         
         Args:
-            graph: The NetworkX DiGraph to save.
+            graph: The NetworkX DiGraph to save (already structure-only).
             output_path: Path where the graph will be saved.
             format: Format to use for saving. If None, inferred from the file extension.
                    Valid formats: 'gpickle', 'graphml', 'gexf', 'json'.
@@ -57,10 +54,12 @@ class GraphStorage:
         Returns:
             bool: True if saving was successful, False otherwise.
         """
-        output_path = Path(output_path)
+        output_path = Path(output_path) if isinstance(output_path, str) else output_path
+        self.logger.info(f"Saving graph to {output_path} in {format} format")
         
         # Create parent directories if they don't exist
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        self.logger.debug(f"Ensured parent directories exist for '{output_path}'")
         
         # If format is not specified, try to infer it from the file extension
         if format is None:
@@ -71,6 +70,8 @@ class GraphStorage:
         
         format = format.lower()
         self.logger.info(f"Saving graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges to '{output_path}' in '{format}' format")
+
+        # Graph is already structure-only, no need for preprocessing
         
         try:
             if format == 'gpickle':
@@ -144,168 +145,53 @@ class GraphStorage:
                 return None
             
             self.logger.info(f"Graph loaded from '{input_path}' with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
+
+            for node in graph.nodes:
+                if 'node_role' in graph.nodes[node]:
+                    # Ensure roles are stored as a set for consistency
+                    graph.nodes[node]['node_role'] = graph.nodes[node]['node_role'].split(', ')
+
             return graph
         
         except Exception as e:
             self.logger.error(f"Error loading graph from '{input_path}' in '{format}' format: {e}", exc_info=True)
             return None
 
-    def save_structure_only(
-        self, graph: nx.DiGraph, output_path: Union[str, Path], format: Optional[str] = None
-    ) -> bool:
-        """
-        Save only the structure (nodes and edges) of a NetworkX DiGraph, without PLSQL_CodeObject data.
-
-        Args:
-            graph: The NetworkX DiGraph to save.
-            output_path: Path where the graph will be saved.
-            format: Format to use for saving. If None, inferred from the file extension.
-                   Valid formats: 'gpickle', 'graphml', 'gexf', 'json'.
-
-        Returns:
-            bool: True if saving was successful, False otherwise.
-        """
-        output_path = Path(output_path)
-        
-        # Create parent directories if they don't exist
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # If format is not specified, try to infer it from the file extension
-        if format is None:
-            format = output_path.suffix.lstrip('.')
-            if not format:
-                self.logger.error(f"Cannot infer format from '{output_path}'. No file extension provided.")
-                return False
-        
-        format = format.lower()
-        self.logger.info(f"Saving structure-only graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges to '{output_path}' in '{format}' format")
-        
-        try:
-            # Create a clean graph with only node IDs and basic attributes (no PLSQL_CodeObject instances)
-            structure_graph = self.extract_structure_only(graph)
-            
-            # Save the clean structure graph
-            if format == 'gpickle':
-                nx.write_gpickle(structure_graph, output_path)
-            elif format == 'graphml':
-                nx.write_graphml(structure_graph, output_path)
-            elif format == 'gexf':
-                nx.write_gexf(structure_graph, output_path)
-            elif format == 'json' or format == 'node_link':
-                # Convert to serializable format
-                data = nx.node_link_data(structure_graph, edges="edges")
-                with open(output_path, 'w') as f:
-                    json.dump(data, f, indent=2)
-            else:
-                self.logger.error(f"Unsupported graph format: '{format}'. Use 'gpickle', 'graphml', 'gexf', or 'json'.")
-                return False
-            
-            self.logger.info(f"Graph structure successfully saved to '{output_path}'")
-            return True
-        
-        except Exception as e:
-            self.logger.error(f"Error saving graph structure to '{output_path}' in '{format}' format: {e}", exc_info=True)
-            return False
-
-    def load_and_populate(
+    def rehydrate_graph_with_objects(
         self, 
-        input_path: Union[str, Path], 
-        database_loader: DatabaseLoader,  # Should be DatabaseLoader but avoiding circular imports
-        format: Optional[str] = None
-    ) -> Optional[nx.DiGraph]:
+        graph: nx.DiGraph,
+        object_map: Dict[str, object],  # Mapping from node_id to PLSQL_CodeObject
+        logger: Optional[lg.Logger] = None
+    ) -> nx.DiGraph:
         """
-        Load a graph structure and populate it with PLSQL_CodeObject instances from the database.
+        Rehydrate a structure-only graph with PLSQL_CodeObject instances.
 
         Args:
-            input_path: Path to the file containing the saved graph structure.
-            database_loader: Instance of DatabaseLoader to fetch PLSQL_CodeObject instances.
-            format: Format of the saved graph. If None, inferred from the file extension.
-                   Valid formats: 'gpickle', 'graphml', 'gexf', 'json'.
+            graph: The structure-only NetworkX DiGraph.
+            object_map: Dictionary mapping node IDs to PLSQL_CodeObject instances.
+            logger: Optional logger instance. If None, uses self.logger.
 
         Returns:
-            nx.DiGraph: The loaded and populated graph, or None if loading failed.
+            nx.DiGraph: The rehydrated graph with 'object' attributes on nodes.
         """
-        # First, load the structure-only graph
-        structure_graph = self.load_graph(input_path, format)
-        if structure_graph is None:
-            return None
+        logger = logger or self.logger
         
-        self.logger.info(f"Loaded graph structure with {structure_graph.number_of_nodes()} nodes. Populating with code objects...")
+        logger.info(f"Rehydrating graph with {len(object_map)} code objects...")
         
-        try:
-            # Load all code objects from the database
-            code_objects = database_loader.load_all_objects()
-            if not code_objects:
-                self.logger.warning("No code objects loaded from database. Graph nodes will not be populated with object data.")
-                return structure_graph
-            
-            # Create a mapping from object IDs to code objects for quick lookup
-            code_object_map = {obj.id: obj for obj in code_objects}
-            
-            # Populate the graph nodes with the corresponding code objects
-            nodes_populated = 0
-            nodes_without_objects = 0
-            
-            for node_id in structure_graph.nodes():
-                if 'object_id' in structure_graph.nodes[node_id]:
-                    object_id = structure_graph.nodes[node_id]['object_id']
-                    if object_id in code_object_map:
-                        structure_graph.nodes[node_id]['object'] = code_object_map[object_id]
-                        nodes_populated += 1
-                    else:
-                        self.logger.warning(f"Code object with ID {object_id} not found in database for node {node_id}")
-                        nodes_without_objects += 1
-            
-            self.logger.info(f"Graph populated with {nodes_populated} code objects. {nodes_without_objects} nodes could not be populated.")
-            return structure_graph
-            
-        except Exception as e:
-            self.logger.error(f"Error populating graph with code objects: {e}", exc_info=True)
-            return structure_graph  # Return the structure graph even if population fails
-
-    def extract_structure_only(self, graph: nx.DiGraph) -> nx.DiGraph:
-        """
-        Create a new graph with only the structure (nodes and edges) of the input graph,
-        without the PLSQL_CodeObject instances.
+        # Create a copy of the graph to avoid modifying the original
+        rehydrated_graph = graph.copy()
         
-        This is useful for lightweight graph storage or for exporting to formats that
-        can't handle complex Python objects.
+        # Add the code objects to the graph nodes
+        nodes_populated = 0
+        nodes_without_objects = 0
         
-        Args:
-            graph: The NetworkX DiGraph containing PLSQL_CodeObject data
-            
-        Returns:
-            nx.DiGraph: A new graph with the same structure but without PLSQL_CodeObject instances
-        """
-        self.logger.debug(f"Extracting structure-only graph from graph with {graph.number_of_nodes()} nodes")
+        for node_id in rehydrated_graph.nodes():
+            if node_id in object_map:
+                rehydrated_graph.nodes[node_id]['object'] = object_map[node_id]
+                nodes_populated += 1
+            else:
+                logger.warning(f"Code object not found for node {node_id}")
+                nodes_without_objects += 1
         
-        # Create a clean graph with only node IDs and basic attributes
-        structure_graph = nx.DiGraph()
-        
-        # Add all nodes without the large code objects
-        for node_id in graph.nodes:
-            node_data = {}
-            
-            # Copy basic attributes, filtering out the large PLSQL_CodeObject
-            if 'object' in graph.nodes[node_id]:
-                # Skip storing the large PLSQL_CodeObject
-                # Optionally store very minimal information about the object
-                code_obj = graph.nodes[node_id]['object']
-                if hasattr(code_obj, 'id') and hasattr(code_obj, 'name') and hasattr(code_obj, 'package_name'):
-                    node_data['object_id'] = getattr(code_obj, 'id')
-                    node_data['name'] = getattr(code_obj, 'name')
-                    node_data['package_name'] = getattr(code_obj, 'package_name')
-                    node_data['type'] = getattr(code_obj, 'type').value if hasattr(code_obj, 'type') else None
-            
-            # Add any other non-object attributes that might be present
-            for attr, value in graph.nodes[node_id].items():
-                if attr != 'object' and not attr.startswith('_'):
-                    node_data[attr] = value
-            
-            structure_graph.add_node(node_id, **node_data)
-        
-        # Add all edges with their attributes
-        for u, v, data in graph.edges(data=True):
-            structure_graph.add_edge(u, v, **data)
-            
-        return structure_graph
+        logger.info(f"Graph rehydrated with {nodes_populated} code objects. {nodes_without_objects} nodes could not be populated.")
+        return rehydrated_graph

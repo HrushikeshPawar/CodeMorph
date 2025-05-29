@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 from loguru import logger # Assuming PLSQLSignatureParser expects a loguru logger
 
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
 
 # Sample signature for profiling - use more and varied samples for real profiling
@@ -33,8 +33,8 @@ def run_parsing_task(app_config):
     return app_config.output_base_dir
 
 if __name__ == "__main__":
-    # Create AppConfig instance
-    app_config = AppConfig(
+    # Create PLSQLAnalyzerSettings instance
+    app_config = PLSQLAnalyzerSettings(
         source_code_root_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/packages/plsql_analyzer/tests/test_data"),
         output_base_dir=Path("/media/hrushikesh/SharedDrive/ActiveProjects/CodeMorph/generated/artifacts"),
         log_verbose_level=0,  # Minimal logging for profiling
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     print("\n--- Profiling Results (Top 20 by Total Time) ---")
     print(s.getvalue())
 
-    # For more detailed analysis, dump stats to a file using the AppConfig output directory
+    # For more detailed analysis, dump stats to a file using the PLSQLAnalyzerSettings output directory
     profile_output = output_dir / "signature_parser.prof"
     profiler.dump_stats(profile_output)
     

@@ -24,7 +24,7 @@ CREATE OR REPLACE PACKAGE BODY employee_pkg AS
     v_manager_name VARCHAR2(100);
     v_manager_id NUMBER; -- Assume logic to find manager_id
   BEGIN
-    util_common.logger_pkg.log_debug('Fetching internal manager details for emp: ' || p_emp_id);
+    schema_util_common.logger_pkg.log_debug('Fetching internal manager details for emp: ' || p_emp_id);
     -- Simulate getting manager_id
     IF p_emp_id = 1 THEN v_manager_id := 2; END IF;
 
@@ -47,21 +47,21 @@ CREATE OR REPLACE PACKAGE BODY employee_pkg AS
     v_new_emp_id NUMBER;
     PRAGMA AUTONOMOUS_TRANSACTION; -- Test: PRAGMA
   BEGIN
-    util_common.logger_pkg.log_debug('Adding employee: ' || p_name); -- Test: Call to utility package from different schema
+    schema_util_common.logger_pkg.log_debug('Adding employee: ' || p_name); -- Test: Call to utility package from different schema
 
     -- Simulate sequence usage
-    -- SELECT app_core.employee_id_seq.NEXTVAL INTO v_new_emp_id FROM DUAL; (Conceptual)
+    -- SELECT schema_app_core.employee_id_seq.NEXTVAL INTO v_new_emp_id FROM DUAL; (Conceptual)
     v_new_emp_id := NVL(p_dept_id,0) * 1000 + FLOOR(DBMS_RANDOM.VALUE(1,999)); -- Test: NVL, FLOOR, DBMS_RANDOM.VALUE calls
 
     -- Simulate INSERT
-    -- INSERT INTO app_core.employees (id, name, salary, department_id)
+    -- INSERT INTO schema_app_core.employees (id, name, salary, department_id)
     -- VALUES (v_new_emp_id, p_name, p_salary, p_dept_id);
-    util_common.logger_pkg.log_message(p_level => 3, p_message => 'Employee ' || p_name || ' added with ID: ' || v_new_emp_id);
+    schema_util_common.logger_pkg.log_message(p_level => 3, p_message => 'Employee ' || p_name || ' added with ID: ' || v_new_emp_id);
 
     COMMIT;
   EXCEPTION
     WHEN OTHERS THEN
-      util_common.logger_pkg.log_error('Failed to add employee: ' || p_name);
+      schema_util_common.logger_pkg.log_error('Failed to add employee: ' || p_name);
       ROLLBACK;
   END add_employee;
 
@@ -69,7 +69,7 @@ CREATE OR REPLACE PACKAGE BODY employee_pkg AS
     p_emp_id IN NUMBER
   ) RETURN t_employee_rec IS
   BEGIN
-    util_common.logger_pkg.log_debug('Fetching employee: ' || p_emp_id);
+    schema_util_common.logger_pkg.log_debug('Fetching employee: ' || p_emp_id);
     -- Simulate fetching from DB and populating t_employee_rec
     RETURN get_employee_raw_data(p_emp_id);
   END get_employee;
@@ -80,8 +80,8 @@ CREATE OR REPLACE PACKAGE BODY employee_pkg AS
   ) IS
   BEGIN
     -- Simulate UPDATE
-    -- UPDATE app_core.employees SET salary = p_new_salary WHERE id = p_emp_id;
-    util_common.logger_pkg.log_info('Updated salary for employee: ' || p_emp_id);
+    -- UPDATE schema_app_core.employees SET salary = p_new_salary WHERE id = p_emp_id;
+    schema_util_common.logger_pkg.log_info('Updated salary for employee: ' || p_emp_id);
   END "Update_Employee_Info";
 
   -- Full definition of forward-declared function
@@ -111,7 +111,7 @@ CREATE OR REPLACE PACKAGE BODY employee_pkg AS
     v_idx PLS_INTEGER := 0;
   BEGIN
     -- Simulate cursor loop
-    -- FOR rec IN (SELECT id FROM app_core.employees WHERE manager_id = p_manager_id) LOOP -- Test: FOR LOOP with SELECT
+    -- FOR rec IN (SELECT id FROM schema_app_core.employees WHERE manager_id = p_manager_id) LOOP -- Test: FOR LOOP with SELECT
     --   v_idx := v_idx + 1;
     --   v_report_list(v_idx) := rec.id;
     -- END LOOP;

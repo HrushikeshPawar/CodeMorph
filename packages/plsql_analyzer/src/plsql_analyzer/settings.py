@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import List, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, computed_field
 import os
 
-class AppConfig(BaseModel):
+class PLSQLAnalyzerSettings(BaseModel):
     """
     Centralized application configuration using Pydantic for type safety and validation.
     """
@@ -62,15 +62,20 @@ class AppConfig(BaseModel):
         description="List of keywords to drop during call extraction."
     )
 
-    @property
+    allow_parameterless_calls: bool = Field(
+        default=False,
+        description="Whether to extract calls that do not have parameters, e.g., `my_procedure;` or `SYSDATE`."
+    )
+
+    @computed_field
     def artifacts_dir(self) -> Path:
         return self.output_base_dir
 
-    @property
+    @computed_field
     def logs_dir(self) -> Path:
         return self.output_base_dir / "logs" / "plsql_analyzer"
 
-    @property
+    @computed_field
     def database_path(self) -> Path:
         return self.output_base_dir / self.database_filename
 
@@ -197,28 +202,46 @@ CALL_EXTRACTOR_KEYWORDS_TO_DROP = [
     "COALESCE",
     "DECODE",
     "UTL_FILE.FOPEN",
+    "SQLCODE",
+    "SQLERRM",
+
+    # Built-in Functions:
     "DBMS_RANDOM.VALUE",
     "DBMS_RANDOM.STRING",
     "DBMS_METADATA.GET_DDL",
-    "SQLCODE",
-    "SQLERRM",
     "DBMS_LOB.GETLENGTH",
     "DBMS_LOB.SUBSTR",
     "DBMS_SQL.OPEN_CURSOR",
     "DBMS_SQL.EXECUTE",
-
-    # Procedure:
     "DBMS_OUTPUT.PUT_LINE",
     "DBMS_OUTPUT.ENABLE",
-    "UTL_FILE.PUT_LINE",
-    "UTL_FILE.GET_LINE",
-    "UTL_FILE.FCLOSE",
     "DBMS_LOCK.SLEEP",
     "DBMS_SCHEDULER.CREATE_JOB",
     "DBMS_SCHEDULER.RUN_JOB",
-    "RAISE_APPLICATION_ERROR",
     "DBMS_SQL.PARSE",
     "DBMS_SQL.CLOSE_CURSOR",
+
+
+    "SYS.DBMS_RANDOM.VALUE",
+    "SYS.DBMS_RANDOM.STRING",
+    "SYS.DBMS_METADATA.GET_DDL",
+    "SYS.DBMS_LOB.GETLENGTH",
+    "SYS.DBMS_LOB.SUBSTR",
+    "SYS.DBMS_SQL.OPEN_CURSOR",
+    "SYS.DBMS_SQL.EXECUTE",
+    "SYS.DBMS_OUTPUT.PUT_LINE",
+    "SYS.DBMS_OUTPUT.ENABLE",
+    "SYS.DBMS_LOCK.SLEEP",
+    "SYS.DBMS_SCHEDULER.CREATE_JOB",
+    "SYS.DBMS_SCHEDULER.RUN_JOB",
+    "SYS.DBMS_SQL.PARSE",
+    "SYS.DBMS_SQL.CLOSE_CURSOR",
+
+    # Procedure:
+    "UTL_FILE.PUT_LINE",
+    "UTL_FILE.GET_LINE",
+    "UTL_FILE.FCLOSE",
+    "RAISE_APPLICATION_ERROR",
 
     # PL/SQL Structure and Control Flow:
     "DECLARE",
@@ -243,6 +266,30 @@ CALL_EXTRACTOR_KEYWORDS_TO_DROP = [
     "NULL",
     "AND",
     "OR",
+    "TRUE",
+    "FALSE",
+
+    # CURSOR ATTRIBUTES:
+    "NOTFOUND",
+    "FOUND",
+    "ROWCOUNT",
+    "ISOPEN",
+    "ROWTYPE",
+    "TYPE",
+    "ROWID",
+    "UROWID",
+    "BULK",
+    "COLLECT",
+    "LIMIT",
+    "OPEN",
+    "CLOSE",
+    "FETCH",
+    "NEXT",
+    "FIRST",
+    "LAST",
+    "ABSOLUTE",
+    "RELATIVE",
+    "PRIOR",
 
     # PL/SQL Declarations and Types:
     "CONSTANT",

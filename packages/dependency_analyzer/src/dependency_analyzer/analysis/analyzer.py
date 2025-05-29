@@ -1,7 +1,7 @@
 from __future__ import annotations
 import networkx as nx
 import loguru as lg # type: ignore
-from typing import List, Dict, Set, Optional, Generator, Tuple
+from typing import List, Dict, Set, Optional, Generator
 import re
 
 # Assuming plsql_analyzer is a package accessible in the Python path.
@@ -39,7 +39,6 @@ def find_unused_objects(graph: nx.DiGraph, logger: lg.Logger) -> Set[str]:
     logger.info(f"Found {len(unused_nodes)} unused objects: {unused_nodes if unused_nodes else 'None'}")
     return unused_nodes
 
-
 def find_circular_dependencies(graph: nx.DiGraph, logger: lg.Logger) -> List[List[str]]:
     """
     Detects circular dependencies (cycles) among code objects in the graph.
@@ -73,12 +72,11 @@ def find_circular_dependencies(graph: nx.DiGraph, logger: lg.Logger) -> List[Lis
         logger.error(f"Error finding circular dependencies: {e}", exc_info=True)
         return []
 
-
 def generate_subgraph_for_node(
     graph: nx.DiGraph,
     node_id: str,
     logger: lg.Logger,
-    upstream_depth: int = 1,
+    upstream_depth: int = 0,
     downstream_depth: Optional[int] = None
 ) -> Optional[nx.DiGraph]:
     """
@@ -215,7 +213,6 @@ def generate_subgraph_for_node(
     logger.debug(f"Subgraph for '{node_id}' created with {subgraph.number_of_nodes()} nodes and {subgraph.number_of_edges()} edges.")
     return subgraph
 
-
 def find_entry_points(graph: nx.DiGraph, logger: lg.Logger) -> Set[str]:
     """
     Identifies potential entry points into the application or system.
@@ -236,8 +233,12 @@ def find_entry_points(graph: nx.DiGraph, logger: lg.Logger) -> Set[str]:
     logger.info(f"Identified {len(entry_points)} potential entry points: {entry_points if entry_points else 'None'}")
     return entry_points
 
-
-def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholders: bool = True) -> Set[str]:
+def find_terminal_nodes(
+    graph: nx.DiGraph, 
+    logger: lg.Logger, 
+    exclude_placeholders: bool = True,
+    object_map: Optional[Dict[str, object]] = None
+) -> Set[str]:
     """
     Identifies terminal nodes in the graph (nodes with an out-degree of 0).
     These are objects that do not call any other objects within the analyzed set,
@@ -249,6 +250,8 @@ def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholde
         exclude_placeholders: If True, attempts to filter out nodes that are
                               placeholders for out-of-scope calls (typically of
                               type CodeObjectType.UNKNOWN).
+        object_map: Optional dictionary mapping node IDs to PLSQL_CodeObject instances.
+                   Required if exclude_placeholders=True for structure-only graphs.
 
     Returns:
         A set of node IDs that are terminal nodes.
@@ -259,24 +262,34 @@ def find_terminal_nodes(graph: nx.DiGraph, logger: lg.Logger, exclude_placeholde
         return set()
 
     terminal_nodes: Set[str] = set()
-    for node_id, node_data in graph.nodes(data=True):
+    for node_id in graph.nodes():
         if graph.out_degree(node_id) == 0:
             if exclude_placeholders:
-                # Access the 'object' attribute which should be a PLSQL_CodeObject instance
-                code_object_instance = node_data.get('object')
-                if code_object_instance and hasattr(code_object_instance, 'type'):
-                    if code_object_instance.type == CodeObjectType.UNKNOWN:
+                # For structure-only graphs, we need to check the type attribute directly or use object_map
+                node_data = graph.nodes[node_id]
+                node_type = node_data.get('type')
+                
+                # If type is available directly in node attributes (structure-only)
+                if node_type is not None:
+                    if (isinstance(node_type, str) and node_type.upper() == 'UNKNOWN') or \
+                       (hasattr(node_type, 'name') and node_type.name == 'UNKNOWN') or \
+                       (node_type == CodeObjectType.UNKNOWN):
+                        logger.trace(f"Node '{node_id}' has out-degree 0 but is an UNKNOWN type placeholder. Excluding.")
+                        continue # Skip this placeholder node
+                # If object_map is provided, check the object type
+                elif object_map and node_id in object_map:
+                    code_object_instance = object_map[node_id]
+                    if hasattr(code_object_instance, 'type') and code_object_instance.type == CodeObjectType.UNKNOWN:
                         logger.trace(f"Node '{node_id}' has out-degree 0 but is an UNKNOWN type placeholder. Excluding.")
                         continue # Skip this placeholder node
                 else:
-                    logger.warning(f"Node '{node_id}' has out-degree 0, but its 'object' attribute or 'type' is missing. Cannot determine if placeholder. Including by default.")
+                    logger.warning(f"Node '{node_id}' has out-degree 0, but type information is not available. Cannot determine if placeholder. Including by default.")
             
             terminal_nodes.add(node_id)
             logger.trace(f"Node '{node_id}' has out-degree 0, marking as terminal.")
 
     logger.info(f"Found {len(terminal_nodes)} terminal nodes: {terminal_nodes if terminal_nodes else 'None'}")
     return terminal_nodes
-
 
 def get_node_degrees(graph: nx.DiGraph, node_id: str, logger: lg.Logger) -> Optional[Dict[str, int]]:
     """
@@ -315,7 +328,6 @@ def get_node_degrees(graph: nx.DiGraph, node_id: str, logger: lg.Logger) -> Opti
     except Exception as e:
         logger.error(f"Error getting degrees for node '{node_id}': {e}", exc_info=True)
         return None
-
 
 def find_all_paths(
     graph: nx.DiGraph,
@@ -374,7 +386,6 @@ def find_all_paths(
         logger.error(f"Error finding paths between '{source_node_id}' and '{target_node_id}': {e}", exc_info=True)
         return None # Indicate error rather than empty list for unexpected issues
 
-
 def get_connected_components(
     graph: nx.DiGraph,
     logger: lg.Logger,
@@ -417,8 +428,11 @@ def get_connected_components(
         logger.error(f"Error finding {component_type} connected components: {e}", exc_info=True)
         return []
 
-
-def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> None:
+def calculate_node_complexity_metrics(
+    graph: nx.DiGraph, 
+    object_map: Dict[str, object], 
+    logger: lg.Logger
+) -> nx.DiGraph:
     """
     Calculates and stores complexity metrics for each PLSQL_CodeObject node in the graph.
     Metrics:
@@ -427,10 +441,18 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
         - num_calls_made: Number of outgoing calls (unique callees in extracted_calls)
         - acc: Approximate Cyclomatic Complexity (heuristic based on control flow keywords)
     Stores metrics as node attributes: 'loc', 'num_params', 'num_calls_made', 'acc'.
+    
+    Args:
+        graph: The structure-only NetworkX DiGraph.
+        object_map: Dictionary mapping node IDs to PLSQL_CodeObject instances.
+        logger: Logger instance for logging operations.
+        
+    Returns:
+        The graph with complexity metrics added as node attributes.
     """
     if not graph:
         logger.warning("Graph is empty or None. Cannot calculate complexity metrics.")
-        return
+        return graph
 
     # Decision-point keywords for ACC (case-insensitive, word boundaries)
     # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
@@ -439,18 +461,21 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
     keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
     acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
 
-    def is_false_positive(match):
+    def is_false_positive(match, clean_code):
         # Get up to 10 chars before the match
         start = match.start()
-        before = obj.clean_code[max(0, start-10):start].lower()
+        before = clean_code[max(0, start-10):start].lower()
         # Check for 'end' followed by whitespace right before the keyword
         return bool(re.search(r'end\s*$', before))
 
-    for node_id, node_data in graph.nodes(data=True):
-        obj = node_data.get('object')
+    logger.info(f"Calculating complexity metrics for {graph.number_of_nodes()} nodes...")
+    
+    for node_id in graph.nodes():
+        obj = object_map.get(node_id)
         if obj is None:
-            logger.warning(f"Node '{node_id}' missing 'object' attribute. Skipping complexity metrics.")
+            logger.warning(f"Node '{node_id}' not found in object_map. Skipping complexity metrics.")
             continue
+        
         # LOC
         loc = len(obj.clean_code.splitlines()) if obj.clean_code else 0
         # Number of parameters
@@ -464,7 +489,7 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
         # Approximate Cyclomatic Complexity (ACC)
         if obj.clean_code:
             matches = list(acc_pattern.finditer(obj.clean_code))
-            acc_count = sum(1 for m in matches if not is_false_positive(m))
+            acc_count = sum(1 for m in matches if not is_false_positive(m, obj.clean_code))
             acc = acc_count + 1
         else:
             acc = 1
@@ -474,6 +499,8 @@ def calculate_node_complexity_metrics(graph: nx.DiGraph, logger: lg.Logger) -> N
         graph.nodes[node_id]['num_calls_made'] = num_calls_made
         graph.nodes[node_id]['acc'] = acc
         logger.debug(f"Node '{node_id}': LOC={loc}, Params={num_params}, Calls={num_calls_made}, ACC={acc}")
+    
+    return graph
 
 def get_descendants(graph: nx.DiGraph, source_node: str, depth_limit: Optional[int] = None) -> Set[str]:
     """
@@ -495,7 +522,6 @@ def get_descendants(graph: nx.DiGraph, source_node: str, depth_limit: Optional[i
     # BFS tree includes the source node, so remove it
     return set(nx.bfs_tree(graph, source_node, depth_limit=depth_limit).nodes()) - {source_node}
 
-
 def get_ancestors(graph: nx.DiGraph, target_node: str, depth_limit: Optional[int] = None) -> Set[str]:
     """
     Returns the set of all ancestor nodes (can reach target_node) in the graph.
@@ -515,6 +541,7 @@ def get_ancestors(graph: nx.DiGraph, target_node: str, depth_limit: Optional[int
         return nx.ancestors(graph, target_node)
     # Use reversed graph for upstream traversal
     return set(nx.bfs_tree(graph.reverse(copy=False), target_node, depth_limit=depth_limit).nodes()) - {target_node}
+
 def trace_downstream_paths(
     graph: nx.DiGraph,
     source_node: str,
@@ -574,6 +601,7 @@ def trace_downstream_paths(
     except Exception as e:
         logger.error(f"Error tracing downstream paths from '{source_node}': {e}", exc_info=True)
         return []
+
 def classify_nodes(
     graph: nx.DiGraph,
     logger: lg.Logger,
@@ -584,7 +612,7 @@ def classify_nodes(
     utility_out_degree_percentile: float = 0.90,
     utility_max_complexity: int = 50,
     orphan_component_max_size: int = 4
-) -> None:
+) -> nx.DiGraph:
     """
     Classifies nodes in the dependency graph into architectural roles: Hubs, Utilities, Orphans, etc.
     Adds a 'node_role' attribute (list of roles) to each node.
@@ -625,7 +653,7 @@ def classify_nodes(
     node_complexity = {}
     if complexity_metrics_available:
         for node_id, data in graph.nodes(data=True):
-            node_complexity[node_id] = data.get('loc', 0)  # Use 'loc' as a proxy
+            node_complexity[node_id] = data.get('acc', 0)
     # --- Assign roles ---
     for node_id in graph.nodes():
         roles = []
@@ -643,193 +671,225 @@ def classify_nodes(
                     roles.append('utility')
             else:
                 roles.append('utility')
-        # Orphaned component members
+
+        # Orphaned component members        
         for comp in wccs:
             if node_id in comp and len(comp) <= orphan_component_max_size and comp != largest_wcc:
                 roles.append('orphan_component_member')
                 break
+
         # Entry/terminal points (reuse existing logic)
         if in_degrees[node_id] == 0:
-            roles.append('entry_point')
+                roles.append('entry_point')    
         if out_degrees[node_id] == 0:
             roles.append('terminal_node')
-        graph.nodes[node_id]['node_role'] = roles
+
+        graph.nodes[node_id]['node_role'] = ", ".join(roles) if roles else ""
         logger.debug(f"Node {node_id}: roles={roles}")
     logger.info("Node classification complete.")
 
+    return graph
 
-# --- Example Usage (Illustrative) ---
-if __name__ == '__main__':
-    # Basic Logger Setup for Example
-    import sys
-    example_logger = lg.logger
-    example_logger.remove()
-    example_logger.add(
-        sys.stderr,
-        level="DEBUG", # Set to TRACE for more detail, DEBUG for example output
-        colorize=True,
-        format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}:{function}:{line}</cyan> - <level>{message}</level>"
-    )
-    example_logger.info("Running analyzer.py example functions...")
-
-    # --- Mock Graph Setup ---
-    # Create a sample graph similar to what GraphConstructor might produce
-    mock_graph = nx.DiGraph()
-
-    # Mock PLSQL_CodeObject (minimal for testing type checks)
-    class MockPLSQLCodeObject:
-        def __init__(self, id: str, type: CodeObjectType = CodeObjectType.PROCEDURE, package_name: Optional[str] = None):
-            self.id = id
-            self.name = id.split('.')[-1] if '.' in id else id
-            self.package_name = package_name
-            self.type = type
-        def __repr__(self):
-            return f"MockObj({self.id}, type={self.type.name})"
-
-    # Nodes: 'pkg.procA', 'pkg.procB', 'pkg.procC', 'standalone_func', 'util.helper', 'external.api' (placeholder)
-    nodes_with_data: List[Tuple[str, Dict[str, MockPLSQLCodeObject]]] = [
-        ("pkg.procA", {'object': MockPLSQLCodeObject("pkg.procA", CodeObjectType.PROCEDURE, "pkg")}),
-        ("pkg.procB", {'object': MockPLSQLCodeObject("pkg.procB", CodeObjectType.PROCEDURE, "pkg")}),
-        ("pkg.procC", {'object': MockPLSQLCodeObject("pkg.procC", CodeObjectType.FUNCTION, "pkg")}),
-        ("standalone_func", {'object': MockPLSQLCodeObject("standalone_func", CodeObjectType.FUNCTION)}),
-        ("util.helper", {'object': MockPLSQLCodeObject("util.helper", CodeObjectType.PROCEDURE, "util")}),
-        ("external.api", {'object': MockPLSQLCodeObject("external.api", CodeObjectType.UNKNOWN)}), # Placeholder
-        ("unused_proc", {'object': MockPLSQLCodeObject("unused_proc", CodeObjectType.PROCEDURE)}),
-        ("entry_point_proc", {'object': MockPLSQLCodeObject("entry_point_proc", CodeObjectType.PROCEDURE)}),
-    ]
-    mock_graph.add_nodes_from(nodes_with_data)
-
-    # Edges:
-    # pkg.procA -> pkg.procB
-    # pkg.procB -> pkg.procC
-    # pkg.procC -> pkg.procA  (Cycle: A -> B -> C -> A)
-    # standalone_func -> pkg.procA
-    # standalone_func -> util.helper
-    # util.helper -> external.api (calls an unknown/placeholder)
-    # entry_point_proc -> pkg.procB
-    mock_graph.add_edges_from([
-        ("pkg.procA", "pkg.procB"),
-        ("pkg.procB", "pkg.procC"),
-        ("pkg.procC", "pkg.procA"),
-        ("standalone_func", "pkg.procA"),
-        ("standalone_func", "util.helper"),
-        ("util.helper", "external.api"),
-        ("entry_point_proc", "pkg.procB"), # entry_point_proc calls something
-    ])
-    example_logger.info(f"Mock graph created with {mock_graph.number_of_nodes()} nodes and {mock_graph.number_of_edges()} edges.")
-
-    # --- Test find_unused_objects ---
-    example_logger.info("\\n--- Testing find_unused_objects ---")
-    unused = find_unused_objects(mock_graph, example_logger)
-    # Expected: {'unused_proc'} (entry_point_proc is not unused as it has 0 in-degree but is used as an example entry)
-    # Corrected expectation: find_unused_objects finds all with in-degree 0.
-    # So, 'standalone_func', 'unused_proc', 'entry_point_proc'
-    example_logger.info(f"Unused objects: {unused}")
-
-
-    # --- Test find_circular_dependencies ---
-    example_logger.info("\\n--- Testing find_circular_dependencies ---")
-    cycles = find_circular_dependencies(mock_graph, example_logger)
-    # Expected: [['pkg.procA', 'pkg.procB', 'pkg.procC']] or permutations
-    example_logger.info(f"Circular dependencies: {cycles}")
-
-    # --- Test generate_subgraph_for_node ---
-    example_logger.info("\\n--- Testing generate_subgraph_for_node ---")
-    subgraph_A = generate_subgraph_for_node(mock_graph, "pkg.procA", example_logger, upstream_depth=1, downstream_depth=1)
-    if subgraph_A:
-        example_logger.info(f"Subgraph for 'pkg.procA' (1 level up/down): Nodes={list(subgraph_A.nodes())}, Edges={list(subgraph_A.edges())}")
+def list_nodes(
+    graph: nx.DiGraph,
+    logger: lg.Logger,
+    filter_node_type: List[str] = [],
+    filter_packages: List[str] = [],
+    filter_name_substr: Optional[str] = None,
+    limit: Optional[int] = None,
+    sort_by: str = "name"
+) -> List[Dict[str, str]]:
+    """
+    List all nodes in the graph with optional filtering and sorting.
     
-    subgraph_standalone = generate_subgraph_for_node(mock_graph, "standalone_func", example_logger, upstream_depth=0, downstream_depth=2)
-    if subgraph_standalone:
-        example_logger.info(f"Subgraph for 'standalone_func' (0 levels up, 2 levels down): Nodes={list(subgraph_standalone.nodes())}, Edges={list(subgraph_standalone.edges())}")
-
-    # --- Test find_entry_points ---
-    example_logger.info("\\n--- Testing find_entry_points ---")
-    entries = find_entry_points(mock_graph, example_logger)
-    # Expected: {'standalone_func', 'unused_proc', 'entry_point_proc'}
-    example_logger.info(f"Potential entry points: {entries}")
-
-    # --- Test find_terminal_nodes ---
-    example_logger.info("\\n--- Testing find_terminal_nodes ---")
-    terminals_exclude_placeholders = find_terminal_nodes(mock_graph, example_logger, exclude_placeholders=True)
-    # Expected: empty set, because external.api is UNKNOWN and procC is in a cycle.
-    # If external.api was not UNKNOWN, it would be here.
-    # If util.helper didn't call external.api, util.helper would be here.
-    # If pkg.procC didn't call pkg.procA, it would be here.
-    # The only node with out-degree 0 is 'external.api'. If excluded, then empty.
-    example_logger.info(f"Terminal nodes (excluding placeholders): {terminals_exclude_placeholders}")
-
-    terminals_include_placeholders = find_terminal_nodes(mock_graph, example_logger, exclude_placeholders=False)
-    # Expected: {'external.api'}
-    example_logger.info(f"Terminal nodes (including placeholders): {terminals_include_placeholders}")
-
-
-    # --- Test get_node_degrees ---
-    example_logger.info("\\n--- Testing get_node_degrees ---")
-    degrees_A = get_node_degrees(mock_graph, "pkg.procA", example_logger)
-    # Expected: {'in_degree': 2 ('pkg.procC', 'standalone_func'), 'out_degree': 1 ('pkg.procB'), 'total_degree': 3}
-    example_logger.info(f"Degrees for 'pkg.procA': {degrees_A}")
-
-    degrees_external = get_node_degrees(mock_graph, "external.api", example_logger)
-    # Expected: {'in_degree': 1 ('util.helper'), 'out_degree': 0, 'total_degree': 1}
-    example_logger.info(f"Degrees for 'external.api': {degrees_external}")
-
-    # --- Test find_all_paths ---
-    example_logger.info("\\n--- Testing find_all_paths ---")
-    paths_standalone_to_C = find_all_paths(mock_graph, "standalone_func", "pkg.procC", example_logger)
-    # Expected: [['standalone_func', 'pkg.procA', 'pkg.procB', 'pkg.procC']]
-    example_logger.info(f"Paths from 'standalone_func' to 'pkg.procC': {paths_standalone_to_C}")
+    Args:
+        graph: The NetworkX DiGraph
+        logger: Logger instance
+        filter_node_type: Filter by code object type (case-insensitive)
+        filter_packages: Filter by package name (case-insensitive substring match)
+        filter_name_substr: Filter by node name (case-insensitive substring match)
+        limit: Maximum number of nodes to return
+        sort_by: Sort field ('name', 'type', 'package', 'degree')
+        
+    Returns:
+        List of dictionaries containing node information
+    """
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot list nodes.")
+        return []
     
-    paths_A_to_external = find_all_paths(mock_graph, "pkg.procA", "external.api", example_logger, cutoff=3) # Too short
-    example_logger.info(f"Paths from 'pkg.procA' to 'external.api' (cutoff 3): {paths_A_to_external}")
+    logger.info(f"Listing nodes with filters - type: {filter_node_type}, package: {filter_packages}, name: {filter_name_substr}")
     
-    paths_A_to_external_long = find_all_paths(mock_graph, "pkg.procA", "external.api", example_logger, cutoff=5)
-    # Expected: [['pkg.procA', 'pkg.procB', 'pkg.procC', 'pkg.procA', ... NO, simple paths!
-    # Path: pkg.procA -> pkg.procB -> pkg.procC -> (stuck in cycle, cannot reach standalone_func -> util.helper -> external.api without repeating nodes from cycle)
-    # Actually, there is no simple path from A to external.api because A is in a cycle and standalone_func is outside pointing in.
-    # Let's try standalone_func to external.api
-    paths_standalone_to_external = find_all_paths(mock_graph, "standalone_func", "external.api", example_logger)
-    # Expected: [['standalone_func', 'util.helper', 'external.api']]
-    example_logger.info(f"Paths from 'standalone_func' to 'external.api': {paths_standalone_to_external}")
+    nodes_info = []
+    
+    # Extract information for each node
+    for node_id, node_data in graph.nodes(data=True):
 
+        node_type = node_data.get('type', 'UNKNOWN')  # Default to UNKNOWN if not set
+        if isinstance(node_type, str):
+            node_type = node_type.upper()
+        elif isinstance(node_type, CodeObjectType):
+            node_type = node_type.name.upper()
+        else:
+            logger.warning(f"Node '{node_id}' has an unexpected type: {node_type}. Defaulting to UNKNOWN.")
+            node_type = 'UNKNOWN'
 
-    # --- Test get_connected_components ---
-    example_logger.info("\\n--- Testing get_connected_components ---")
-    scc = get_connected_components(mock_graph, example_logger, strongly_connected=True)
-    # Expected SCCs:
-    # 1. {'pkg.procA', 'pkg.procB', 'pkg.procC'} (the cycle)
-    # 2. {'standalone_func'}
-    # 3. {'util.helper'}
-    # 4. {'external.api'}
-    # 5. {'unused_proc'}
-    # 6. {'entry_point_proc'}
-    example_logger.info(f"Strongly Connected Components ({len(scc)}):")
-    for i, comp in enumerate(scc):
-        example_logger.info(f"  SCC {i+1}: {comp}")
+        # Extract basic information
+        node_info = {
+            'id': node_id,
+            'name': node_data['name'],
+            'type': node_type,
+            'package': node_data['package_name'] if 'package_name' in node_data else '',
+            'loc': node_data.get('loc', None),  # Lines of Code
+            'parameters': node_data.get('num_params', None),  # Number of parameters
+            'calls-made': node_data.get('num_calls_made', None),  # Number of outgoing calls
+            'called-by': graph.in_degree(node_id),
+            'acc': node_data.get('acc', None)  # Approximate Cyclomatic Complexity
+        }
+        
+        # Apply filters
+        filter_node_type = [ftype.upper() for ftype in filter_node_type]  # Normalize to uppercase
+        if filter_node_type and node_info['type'] not in filter_node_type:
+            logger.debug(f"Node '{node_id}' of type '{node_info['type']}' filtered out by type.")
+            continue
+        
+        filter_packages = [pkg.casefold() for pkg in filter_packages]  # Normalize to lowercase
+        if filter_packages and node_info['package'].casefold() not in filter_packages:
+            logger.debug(f"Node '{node_id}' in package '{node_info['package']}' filtered out by package.")
+            continue
+            
+        if filter_name_substr and filter_name_substr.casefold() not in node_info['name'].casefold():
+            logger.debug(f"Node '{node_id}' with name '{node_info['name']}' filtered out by name substring '{filter_name_substr}'.")
+            continue
+        
+        nodes_info.append(node_info)
+    
+    # Sort nodes
+    if sort_by == "id":
+        nodes_info.sort(key=lambda x: x['id'].lower())
+    elif sort_by == "name":
+        nodes_info.sort(key=lambda x: x['name'].lower())
+    elif sort_by == "type":
+        nodes_info.sort(key=lambda x: (x['type'], x['name'].lower()))
+    elif sort_by == "package":
+        nodes_info.sort(key=lambda x: (x['package'].lower(), x['name'].lower()))
+    elif sort_by == "degree":
+        nodes_info.sort(key=lambda x: (x['calls-made'] + x['called-by'], x['name'].lower()), reverse=True)
+    elif sort_by == "acc":
+        nodes_info.sort(key=lambda x: (x['acc'] if x['acc'] is not None else float('inf'), x['name'].lower()))
+    else:
+        logger.warning(f"Unknown sort field '{sort_by}', defaulting to name")
+        nodes_info.sort(key=lambda x: x['name'].lower())
+    
+    # Apply limit
+    if limit == 0:
+        logger.warning("Limit is set to 0, returning no nodes.")
+        return []
+    if limit and limit > 0:
+        nodes_info = nodes_info[:limit]
+    
+    logger.info(f"Returning {len(nodes_info)} nodes after filtering and sorting")
+    return nodes_info
 
-    wcc = get_connected_components(mock_graph, example_logger, strongly_connected=False)
-    # Expected WCCs:
-    # 1. {'pkg.procA', 'pkg.procB', 'pkg.procC', 'standalone_func', 'util.helper', 'external.api', 'entry_point_proc'} (all connected if directions ignored)
-    # 2. {'unused_proc'} (isolated)
-    example_logger.info(f"Weakly Connected Components ({len(wcc)}):")
-    for i, comp in enumerate(wcc):
-        example_logger.info(f"  WCC {i+1}: {comp}")
+def analyze_cycles_enhanced(
+    graph: nx.DiGraph,
+    logger: lg.Logger,
+    min_cycle_length: Optional[int] = None,
+    max_cycle_length: Optional[int] = None,
+    sort_by: str = "length",
+    include_node_details: bool = False
+) -> List[Dict]:
+    """
+    Find and analyze circular dependencies with advanced filtering and sorting.
+    
+    Args:
+        graph: The NetworkX DiGraph
+        logger: Logger instance
+        min_cycle_length: Filter cycles with minimum length
+        max_cycle_length: Filter cycles with maximum length
+        sort_by: Sort cycles by 'length', 'nodes', or 'complexity'
+        include_node_details: Include detailed node information
+        
+    Returns:
+        List of dictionaries containing cycle information
+    """
+    logger.info("Analyzing circular dependencies with enhanced filtering...")
+    
+    if not graph:
+        logger.warning("Graph is empty or None. Cannot analyze cycles.")
+        return []
 
-    # --- Test trace_downstream_paths ---
-    example_logger.info("\\n--- Testing trace_downstream_paths ---")
-    traced_paths_A = trace_downstream_paths(mock_graph, "pkg.procA", example_logger, depth_limit=2)
-    # From pkg.procA, within 2 steps: to pkg.procB, pkg.procC, standalone_func
-    # Paths: [['pkg.procA', 'pkg.procB'], ['pkg.procA', 'pkg.procB', 'pkg.procC']]
-    example_logger.info(f"Traced downstream paths from 'pkg.procA' (depth 2): {traced_paths_A}")
+    try:
+        # Get all cycles using the existing function
+        cycles_raw = find_circular_dependencies(graph, logger)
+        
+        if not cycles_raw:
+            logger.info("No circular dependencies found.")
+            return []
 
-    traced_paths_standalone = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=2)
-    # From standalone_func, within 2 steps: to pkg.procA, util.helper
-    # Paths: [['standalone_func', 'pkg.procA'], ['standalone_func', 'pkg.procA', 'pkg.procB'], ['standalone_func', 'util.helper'], ['standalone_func', 'util.helper', 'external.api']]
-    example_logger.info(f"Traced downstream paths from 'standalone_func' (depth 2): {traced_paths_standalone}")
+        cycles_info = []
+        
+        for i, cycle in enumerate(cycles_raw):
+            cycle_length = len(cycle)
+            
+            # Apply length filters
+            if min_cycle_length is not None and cycle_length < min_cycle_length:
+                continue
+            if max_cycle_length is not None and cycle_length > max_cycle_length:
+                continue
+            
+            # Calculate complexity (sum of node degrees)
+            complexity = sum(graph.degree(node) for node in cycle if node in graph)
+            
+            cycle_info = {
+                'cycle_id': i + 1,
+                'nodes': cycle,
+                'length': cycle_length,
+                'complexity': complexity,
+                'cycle_path': ' → '.join(cycle) + f' → {cycle[0]}'
+            }
+            
+            # Add detailed node information if requested
+            if include_node_details:
+                node_details = []
+                for node in cycle:
+                    if node in graph:
+                        node_data = graph.nodes[node]
 
-    traced_paths_to_external = trace_downstream_paths(mock_graph, "standalone_func", example_logger, depth_limit=3, target_node="external.api")
-    # From standalone_func to external.api, within 3 steps: util.helper -> external.api
-    # Paths: [['standalone_func', 'util.helper', 'external.api']]
-    example_logger.info(f"Traced downstream paths to 'external.api' from 'standalone_func' (depth 3): {traced_paths_to_external}")
+                        node_type = node_data.get('type', 'UNKNOWN')  # Default to UNKNOWN if not set
+                        if isinstance(node_type, str):
+                            node_type = node_type.upper()
+                        elif isinstance(node_type, CodeObjectType):
+                            node_type = node_type.name.upper()
+                        else:
+                            logger.warning(f"Node '{node}' has an unexpected type: {node_type}. Defaulting to UNKNOWN.")
+                            node_type = 'UNKNOWN'                            
 
-    example_logger.info("\\nAnalyzer example finished.")
+                        detail = {
+                            'id': node,
+                            'name': node_data.get('name', node),
+                            'type': node_type,
+                            'package': node_data.get('package_name', ''),
+                            'in_degree': graph.in_degree(node),
+                            'out_degree': graph.out_degree(node)
+                        }
+                        node_details.append(detail)
+                cycle_info['node_details'] = node_details
+            
+            cycles_info.append(cycle_info)
+        
+        # Sort cycles
+        if sort_by == "length":
+            cycles_info.sort(key=lambda x: x['length'])
+        elif sort_by == "nodes":
+            cycles_info.sort(key=lambda x: x['nodes'][0])  # Sort by first node ID
+        elif sort_by == "complexity":
+            cycles_info.sort(key=lambda x: x['complexity'], reverse=True)
+        
+        logger.info(f"Found {len(cycles_info)} cycles after filtering (from {len(cycles_raw)} total)")
+        
+        return cycles_info
+        
+    except Exception as e:
+        logger.error(f"Error analyzing cycles: {e}", exc_info=True)
+        return []

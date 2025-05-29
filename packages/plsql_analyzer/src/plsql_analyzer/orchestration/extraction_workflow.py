@@ -5,7 +5,7 @@ from tqdm.auto import tqdm
 import loguru as lg # Expect logger
 from typing import List, Dict, Any, Optional
 
-from plsql_analyzer.settings import AppConfig
+from plsql_analyzer.settings import PLSQLAnalyzerSettings
 from plsql_analyzer.persistence.database_manager import DatabaseManager
 from plsql_analyzer.parsing.structural_parser import PlSqlStructuralParser
 from plsql_analyzer.parsing.signature_parser import PLSQLSignatureParser
@@ -20,7 +20,7 @@ from plsql_analyzer.utils.text_utils import escape_angle_brackets
 
 class ExtractionWorkflow:
     def __init__(self,
-                    config: AppConfig, # Now expects an AppConfig instance
+                    config: PLSQLAnalyzerSettings, # Now expects an PLSQLAnalyzerSettings instance
                     logger: lg.Logger,
                     db_manager: 'DatabaseManager',
                     structural_parser: 'PlSqlStructuralParser',
@@ -168,7 +168,11 @@ class ExtractionWorkflow:
                 extracted_calls: List[ExtractedCallTuple] = []
                 try:
                     # Pass the object source snippet and the already-created literal map to the call extractor
-                    extracted_calls = self.call_extractor.extract_calls_with_details(object_source_snippet, literal_map)
+                    extracted_calls = self.call_extractor.extract_calls_with_details(
+                        object_source_snippet,
+                        literal_map,
+                        allow_parameterless=self.config.allow_parameterless_calls
+                    )
                     obj_log_ctx.info(f"Extracted {len(extracted_calls)} calls for {actual_object_name}.")
                 except Exception as e:
                     obj_log_ctx.exception(f"Error during call extraction for {actual_object_name}: {escape_angle_brackets(e)}")

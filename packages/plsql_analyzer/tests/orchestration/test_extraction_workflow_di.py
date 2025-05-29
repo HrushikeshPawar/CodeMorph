@@ -3,13 +3,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pathlib import Path
 
-from plsql_analyzer.settings import AppConfig, CALL_EXTRACTOR_KEYWORDS_TO_DROP
+from plsql_analyzer.settings import PLSQLAnalyzerSettings, CALL_EXTRACTOR_KEYWORDS_TO_DROP
 from plsql_analyzer.orchestration.extraction_workflow import ExtractionWorkflow
 
 @pytest.fixture
 def mock_app_config():
-    """Create a mock AppConfig with basic test values"""
-    config = AppConfig(
+    """Create a mock PLSQLAnalyzerSettings with basic test values"""
+    config = PLSQLAnalyzerSettings(
         source_code_root_dir=Path("/test/source"),
         output_base_dir=Path("/test/output"),
         file_extensions_to_include=["sql"],
@@ -37,7 +37,7 @@ def mock_extraction_components(test_logger):
     }
 
 def test_extraction_workflow_init_with_app_config(mock_app_config, mock_extraction_components):
-    """Test that ExtractionWorkflow initializes correctly with an AppConfig instance"""
+    """Test that ExtractionWorkflow initializes correctly with an PLSQLAnalyzerSettings instance"""
     
     # Create the workflow with mock components and config
     workflow = ExtractionWorkflow(
