@@ -83,7 +83,7 @@ class ExtractionWorkflow:
             clean_code, literal_map = clean_code_and_map_literals(code_content, self.logger)
             code_lines = clean_code.splitlines() # Keep for extracting source snippets
         except Exception as e:
-            self.logger.error(f"Failed to read file {fpath}: {escape_angle_brackets(e)}")
+            self.logger.error(f"Failed to read file {fpath}: {escape_angle_brackets(str(e))}")
             return
 
         try:
@@ -91,7 +91,7 @@ class ExtractionWorkflow:
             package_name_from_structural_parser, structurally_parsed_objects = self.structural_parser.parse(clean_code)
             structurally_parsed_objects: Dict
         except Exception as e:
-            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {escape_angle_brackets(e)}")
+            self.logger.exception(f"Critical failure during structural parsing of {fpath}: {escape_angle_brackets(str(e))}")
             self.total_files_failed_structure_parse +=1
             return
             

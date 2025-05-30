@@ -464,6 +464,9 @@ class PlSqlStructuralParser:
             self.logger.trace(f"L{self.line_num}: Combined pending '{self.multiline_object_name_pending}' with current line for object check.")
             self.multiline_object_name_pending = None # Reset pending name
 
+            # Line number should be decremented to match the previous line
+            self.line_num -= 1 # Adjust line number to match the previous line where the keyword was found
+
         obj_match = OBJECT_NAME_REGEX.search(line_to_check_object)# or OBJECT_NAME_REGEX_V2.search(line_to_check_object)
         if obj_match:
 
