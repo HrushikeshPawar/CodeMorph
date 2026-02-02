@@ -509,6 +509,7 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         obj_partial_lines_end_only = PLSQL_CodeObject.from_dict(data_partial_lines_end_only)
         assert obj_partial_lines_end_only.start_line is None
         assert obj_partial_lines_end_only.end_line == 200
+
     def test_signature_raw_text_storage_and_serde(self, basic_code_object_data_for_serde):
         """Test storage and serialization of signature_raw_text."""
         b_data = basic_code_object_data_for_serde

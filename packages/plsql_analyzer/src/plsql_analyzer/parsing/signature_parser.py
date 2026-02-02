@@ -278,7 +278,7 @@ class PLSQLSignatureParser:
             for toks, start, end in self.proc_or_func_signature.scan_string(clean_signature_text):
                 new_len = end - start
                 
-                if new_len >= best_match_len:
+                if new_len > best_match_len:
                     best_match = toks # Take the first (and likely only, for a single object's source)
                     best_match_start = start
                     best_match_end = end
