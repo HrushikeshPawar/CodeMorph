@@ -1,10 +1,10 @@
 import timeit
 import sys
-import loguru
+import loguru as lg
 from plsql_analyzer.utils.code_cleaner import clean_code_and_map_literals
 
 # Configure logger to be silent
-logger = loguru.logger
+logger = lg.logger
 logger.remove()
 # Add a sink that discards everything
 logger.add(lambda msg: None, level="CRITICAL")
