@@ -130,21 +130,24 @@ def generate_subgraph_for_node(
         # Phase 2: Log other relevant edges involving the newly_discovered_in_this_iteration nodes
         # nodes_for_subgraph at this point contains all nodes found *before* this iteration's discoveries
         for newly_discovered_node in nodes_discovered_in_this_iteration:
-            # Edges between newly_discovered_node and nodes already in nodes_for_subgraph (before this iteration's update)
-            for node_already_in_subgraph in nodes_for_subgraph:
-                if graph.has_edge(newly_discovered_node, node_already_in_subgraph):
-                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{node_already_in_subgraph}")
-                if graph.has_edge(node_already_in_subgraph, newly_discovered_node):
-                    edges_to_log_for_this_iteration.add(f"{node_already_in_subgraph}->{newly_discovered_node}")
+            # OPTIMIZED: Instead of iterating over all nodes_for_subgraph and nodes_discovered_in_this_iteration,
+            # we check the neighbors of newly_discovered_node.
             
-            # Edges between newly_discovered_node and OTHER nodes discovered in THIS SAME iteration
-            for another_newly_discovered_node in nodes_discovered_in_this_iteration:
-                if newly_discovered_node == another_newly_discovered_node:
-                    continue
-                if graph.has_edge(newly_discovered_node, another_newly_discovered_node):
-                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{another_newly_discovered_node}")
-                # The reverse (another_newly_discovered_node -> newly_discovered_node) will be covered
-                # when another_newly_discovered_node is the outer loop variable, if it exists.
+            # Outgoing edges: new -> neighbor
+            # Neighbor could be in nodes_for_subgraph OR in nodes_discovered_in_this_iteration
+            for successor in graph.successors(newly_discovered_node):
+                if successor in nodes_for_subgraph:
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{successor}")
+                elif successor in nodes_discovered_in_this_iteration and successor != newly_discovered_node:
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{successor}")
+
+            # Incoming edges: neighbor -> new
+            # We only need to check if neighbor is in nodes_for_subgraph.
+            # If neighbor is in nodes_discovered_in_this_iteration, that edge will be caught when
+            # that neighbor is the 'newly_discovered_node' in the outer loop (as an outgoing edge).
+            for predecessor in graph.predecessors(newly_discovered_node):
+                if predecessor in nodes_for_subgraph:
+                    edges_to_log_for_this_iteration.add(f"{predecessor}->{newly_discovered_node}")
 
         logger.trace(f"Upstream level {i+1} for '{node_id}': added nodes {nodes_discovered_in_this_iteration if nodes_discovered_in_this_iteration else 'none'}.")
         logger.trace(f"Upstream level {i+1} for '{node_id}': relevant edges for this level {edges_to_log_for_this_iteration if edges_to_log_for_this_iteration else 'none'}.")
@@ -180,21 +183,24 @@ def generate_subgraph_for_node(
         # Phase 2: Log other relevant edges involving the newly_discovered_in_this_iteration nodes
         # nodes_for_subgraph at this point contains all nodes found *before* this iteration's discoveries (including upstream ones)
         for newly_discovered_node in nodes_discovered_in_this_iteration:
-            # Edges between newly_discovered_node and nodes already in nodes_for_subgraph (before this iteration's update)
-            for node_already_in_subgraph in nodes_for_subgraph:
-                if graph.has_edge(newly_discovered_node, node_already_in_subgraph):
-                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{node_already_in_subgraph}")
-                if graph.has_edge(node_already_in_subgraph, newly_discovered_node):
-                    edges_to_log_for_this_iteration.add(f"{node_already_in_subgraph}->{newly_discovered_node}")
+            # OPTIMIZED: Instead of iterating over all nodes_for_subgraph and nodes_discovered_in_this_iteration,
+            # we check the neighbors of newly_discovered_node.
 
-            # Edges between newly_discovered_node and OTHER nodes discovered in THIS SAME iteration
-            for another_newly_discovered_node in nodes_discovered_in_this_iteration:
-                if newly_discovered_node == another_newly_discovered_node:
-                    continue
-                if graph.has_edge(newly_discovered_node, another_newly_discovered_node):
-                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{another_newly_discovered_node}")
-                # The reverse (another_newly_discovered_node -> newly_discovered_node) will be covered
-                # when another_newly_discovered_node is the outer loop variable, if it exists.
+            # Outgoing edges: new -> neighbor
+            # Neighbor could be in nodes_for_subgraph OR in nodes_discovered_in_this_iteration
+            for successor in graph.successors(newly_discovered_node):
+                if successor in nodes_for_subgraph:
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{successor}")
+                elif successor in nodes_discovered_in_this_iteration and successor != newly_discovered_node:
+                    edges_to_log_for_this_iteration.add(f"{newly_discovered_node}->{successor}")
+
+            # Incoming edges: neighbor -> new
+            # We only need to check if neighbor is in nodes_for_subgraph.
+            # If neighbor is in nodes_discovered_in_this_iteration, that edge will be caught when
+            # that neighbor is the 'newly_discovered_node' in the outer loop (as an outgoing edge).
+            for predecessor in graph.predecessors(newly_discovered_node):
+                if predecessor in nodes_for_subgraph:
+                    edges_to_log_for_this_iteration.add(f"{predecessor}->{newly_discovered_node}")
 
         logger.trace(f"Downstream level {level+1} for '{node_id}': added nodes {nodes_discovered_in_this_iteration if nodes_discovered_in_this_iteration else 'none'}.")
         logger.trace(f"Downstream level {level+1} for '{node_id}': relevant edges for this level {edges_to_log_for_this_iteration if edges_to_log_for_this_iteration else 'none'}.")
