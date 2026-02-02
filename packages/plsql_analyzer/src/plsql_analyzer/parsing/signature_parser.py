@@ -273,23 +273,23 @@ class PLSQLSignatureParser:
             # Using scan_string to find the first match of a signature
             best_match = None
             best_match_len = 0
+            best_match_start = 0
+            best_match_end = 0
             for toks, start, end in self.proc_or_func_signature.scan_string(clean_signature_text):
                 new_len = end - start
                 
-                if new_len >= best_match_len:
+                if new_len > best_match_len:
                     best_match = toks # Take the first (and likely only, for a single object's source)
+                    best_match_start = start
+                    best_match_end = end
+                    best_match_len = new_len
                     self.logger.trace(f"Found Signature match from {start} to {end}: {escape_angle_brackets(toks.as_dict())}")
 
-            # parsed_dict = self.proc_or_func_signature.parse_string(clean_signature_text).as_dict()
-            # # Ensure 'params' is always a list, even if empty
-            # if "params" not in parsed_dict:
-            #     parsed_dict["params"] = []
-
-            # self.logger.debug(f"Successfully parsed signature. Name: {parsed_dict.get('proc_name') or parsed_dict.get('func_name')}, Param: {json.dumps(parsed_dict["params"], indent=0)}")
-            # return parsed_dict
-            
             if best_match:
                 parsed_dict = best_match.as_dict()
+
+                # Extract the raw signature text
+                parsed_dict['raw_text'] = clean_signature_text[best_match_start:best_match_end]
 
                 # Strip whitespace from string values in the parsed dictionary
                 for key, value in parsed_dict.items():

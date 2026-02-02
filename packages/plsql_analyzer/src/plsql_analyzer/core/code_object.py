@@ -27,7 +27,7 @@ class PLSQL_CodeObject:
                     parsed_parameters: Optional[List[Dict]] = None,
                     parsed_return_type: Optional[str] = None,
                     extracted_calls: Optional[List[CallDetailsTuple]] = None, # Use the named tuple
-                    # signature_raw_text: Optional[str] = None, # Store the raw signature text
+                    signature_raw_text: Optional[str] = None, # Store the raw signature text
                     start_line: Optional[int] = None,
                     end_line: Optional[int] = None
                 ):
@@ -43,7 +43,7 @@ class PLSQL_CodeObject:
         self.parsed_return_type: Optional[str] = parsed_return_type
         self.extracted_calls: List[CallDetailsTuple] = extracted_calls if extracted_calls is not None else []
         
-        # self.signature_raw_text: Optional[str] = signature_raw_text
+        self.signature_raw_text: Optional[str] = signature_raw_text
         self.start_line: Optional[int] = start_line
         self.end_line: Optional[int] = end_line
 
@@ -107,6 +107,7 @@ class PLSQL_CodeObject:
             'overloaded': self.overloaded,
             'parsed_parameters': self.parsed_parameters, # List of dicts
             'parsed_return_type': self.parsed_return_type,
+            'signature_raw_text': self.signature_raw_text,
             'source_code_lines': {'start': self.start_line, 'end': self.end_line},
             # Storing source can make DB large, consider storing only if needed or path to file + lines
             'clean_code': self.clean_code,
@@ -162,6 +163,7 @@ class PLSQL_CodeObject:
             parsed_parameters=data.get('parsed_parameters', []),
             parsed_return_type=data.get('parsed_return_type'),
             extracted_calls=extracted_calls,
+            signature_raw_text=data.get('signature_raw_text'),
             start_line=start_line,
             end_line=end_line
         )
