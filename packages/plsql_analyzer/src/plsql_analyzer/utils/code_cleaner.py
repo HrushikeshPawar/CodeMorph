@@ -47,19 +47,19 @@ def clean_code_and_map_literals(code: str, logger: lg.Logger) -> Tuple[str, Dict
             continue
 
         if inside_multiline_comment:
-            if f"{current_char}{next_char}" == "*/":
+            if current_char == "*" and next_char == "/":
                 inside_multiline_comment = False
                 idx += 2
             else:
                 idx += 1
             continue
         
-        if f"{current_char}{next_char}" == "/*" and not inside_quote:
+        if current_char == "/" and next_char == "*" and not inside_quote:
             inside_multiline_comment = True
             idx += 2
             continue
 
-        if f"{current_char}{next_char}" == "--" and not inside_quote:
+        if current_char == "-" and next_char == "-" and not inside_quote:
             inside_inline_comment = True
             idx += 1 
             continue
