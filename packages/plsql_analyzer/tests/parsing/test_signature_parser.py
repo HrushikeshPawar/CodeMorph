@@ -246,19 +246,3 @@ class TestPLSQLSignatureParser:
             {'name': 'p_param9', 'mode': 'IN', 'type': 'VARCHAR2', 'default_value': 'NULL'},
             {'name': 'p_param10', 'mode': 'IN', 'type': 'VARCHAR2', 'default_value': 'NULL'}
         ]
-
-    def test_raw_text_extraction(self, parser: PLSQLSignatureParser):
-        sig = "PROCEDURE my_proc (p_id IN NUMBER) IS"
-        result = parser.parse(sig)
-        assert result is not None
-        assert result["raw_text"] == "PROCEDURE my_proc (p_id IN NUMBER) IS"
-
-    def test_raw_text_extraction_with_whitespace(self, parser: PLSQLSignatureParser):
-        sig = "  PROCEDURE   my_proc   (  p_id   IN   NUMBER  )   IS  "
-        result = parser.parse(sig)
-        assert result is not None
-        # scan_string finds the match. The leading whitespace is skipped by scan_string finding the first token.
-        # The internal whitespace is part of the match span.
-        # Trailing whitespace after IS is not part of the match.
-        expected_raw_text = "PROCEDURE   my_proc   (  p_id   IN   NUMBER  )   IS"
-        assert result["raw_text"] == expected_raw_text

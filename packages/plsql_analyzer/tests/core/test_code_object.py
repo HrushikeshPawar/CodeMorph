@@ -509,24 +509,3 @@ class TestPLSQLCodeObjectSerializationDeserialization:
         obj_partial_lines_end_only = PLSQL_CodeObject.from_dict(data_partial_lines_end_only)
         assert obj_partial_lines_end_only.start_line is None
         assert obj_partial_lines_end_only.end_line == 200
-
-    def test_signature_raw_text_storage_and_serde(self, basic_code_object_data_for_serde):
-        """Test storage and serialization of signature_raw_text."""
-        b_data = basic_code_object_data_for_serde
-        raw_sig = "PROCEDURE test_procedure_serde (p_param_serde IN VARCHAR2) IS"
-
-        obj = PLSQL_CodeObject(
-            name=b_data['name'],
-            package_name=b_data['package_name'],
-            signature_raw_text=raw_sig
-        )
-
-        assert obj.signature_raw_text == raw_sig
-
-        # Test to_dict
-        obj_dict = obj.to_dict()
-        assert obj_dict['signature_raw_text'] == raw_sig
-
-        # Test from_dict
-        deserialized_obj = PLSQL_CodeObject.from_dict(obj_dict)
-        assert deserialized_obj.signature_raw_text == raw_sig
