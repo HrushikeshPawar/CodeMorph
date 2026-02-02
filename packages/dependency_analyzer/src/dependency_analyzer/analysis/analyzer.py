@@ -460,13 +460,14 @@ def calculate_node_complexity_metrics(
     # Instead, match all, then filter out those preceded by 'end' and whitespace in post-processing
     keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
     acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
+    end_pattern = re.compile(r'end\s*$', re.IGNORECASE)
 
     def is_false_positive(match, clean_code):
         # Get up to 10 chars before the match
         start = match.start()
-        before = clean_code[max(0, start-10):start].lower()
+        before = clean_code[max(0, start-10):start]
         # Check for 'end' followed by whitespace right before the keyword
-        return bool(re.search(r'end\s*$', before))
+        return bool(end_pattern.search(before))
 
     logger.info(f"Calculating complexity metrics for {graph.number_of_nodes()} nodes...")
     

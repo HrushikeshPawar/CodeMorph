@@ -5,6 +5,11 @@ All notable changes to the Dependency Analyzer package will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-02-02
+
+### Changed
+- Performance optimization: Moved regex compilation outside the loop in `calculate_node_complexity_metrics` in `analyzer.py`.
+
 ## [v0.1.0] - 2025-05-28
 
 ### Added
