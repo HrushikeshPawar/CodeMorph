@@ -338,13 +338,11 @@ class CallDetailExtractor:
             return None  # Skip this "call" as it's actually an Oracle outer join operator
         
         # Restore literals
-        # Optimize by defining replacer and accessing regex once
+        # Optimize by defining replacer once
         replacer = lambda match: self.literal_mapping.get(match.group(0), match.group(0))
-        literal_regex = self.LITERAL_REGEX
-
-        restored_positional_params = [literal_regex.sub(replacer, p) for p in positional_params]
+        restored_positional_params = [self.LITERAL_REGEX.sub(replacer, p) for p in positional_params]
         restored_named_params = {
-            name: literal_regex.sub(replacer, val)
+            name: self.LITERAL_REGEX.sub(replacer, val)
             for name, val in named_params.items()
         }
         
