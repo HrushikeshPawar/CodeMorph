@@ -249,12 +249,22 @@ class ExtractionWorkflow:
             self.logger.critical(f"Source code directory does not exist or is not a directory: {source_folder}")
             return
 
-        # Using rglob to find all files matching the extension recursively
+        # Normalize extensions once: ensure leading dot and lower case for efficient lookup
+        extensions = {f".{ext.lower().lstrip('.')}" for ext in self.config.file_extensions_to_include}
+
+        if not extensions:
+            self.logger.warning("No file extensions configured for inclusion. Skipping discovery.")
+            return
+
+        self.logger.info(f"Searching for files with extensions: {', '.join(sorted(extensions))}")
+
+        # Single traversal of the directory tree, filtering by extension in memory
         files_to_process = []
-        for extension in self.config.file_extensions_to_include:
-            self.logger.info(f"Searching for files with extension: {extension}")
-            # Using rglob to find all files matching the extension recursively
-            files_to_process.extend(list(source_folder.rglob(f"*.{extension}")))
+        for fpath in source_folder.rglob("*"):
+            if fpath.suffix.lower() in extensions and fpath.is_file():
+                # Security: Ensure the resolved path is within the source folder to prevent symlink attacks
+                if fpath.resolve().is_relative_to(source_folder):
+                    files_to_process.append(fpath)
 
         if not files_to_process:
             self.logger.warning("No files found to process. Exiting workflow.")

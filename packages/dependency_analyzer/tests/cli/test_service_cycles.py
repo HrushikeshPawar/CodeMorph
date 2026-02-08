@@ -405,7 +405,8 @@ def test_save_file_write_error(mocker, service_instance: CLIService, sample_cycl
     file_path = tmp_path / f"{output_fname}.json"
     service_instance.settings.project_root = tmp_path
 
-    mock_print_success = mocker.patch('dependency_analyzer.cli.service.print_success')
+    # FIX: Patch print_success BEFORE calling the method
+    mock_print_success = mocker.patch('dependency_analyzer.cli.utils.print_success')
 
     with pytest.raises(CLIError, match=f"Failed to save results to '{file_path}': Disk full"):
         service_instance._save_cycles_results(sample_cycles_data_no_details, str(tmp_path / output_fname), "json")
