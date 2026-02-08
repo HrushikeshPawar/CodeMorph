@@ -1,6 +1,5 @@
 import time
 import tempfile
-import shutil
 from pathlib import Path
 import random
 
@@ -32,13 +31,13 @@ def current_implementation(source_folder, extensions_to_include):
     return files_to_process
 
 def optimized_implementation(source_folder, extensions_to_include):
-    files_to_process = []
     # Normalize extensions to include leading dot and be lowercase
     extensions = {f".{ext.lower().lstrip('.')}" for ext in extensions_to_include}
-    for fpath in source_folder.rglob("*"):
-        if fpath.suffix.lower() in extensions and fpath.is_file():
-            files_to_process.append(fpath)
-    return files_to_process
+    return [
+        fpath
+        for fpath in source_folder.rglob("*")
+        if fpath.suffix.lower() in extensions and fpath.is_file()
+    ]
 
 def run_benchmark():
     num_dirs = 1000

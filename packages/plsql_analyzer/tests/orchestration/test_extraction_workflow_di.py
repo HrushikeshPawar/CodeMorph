@@ -57,28 +57,54 @@ def test_extraction_workflow_init_with_app_config(mock_app_config, mock_extracti
 
 @patch("plsql_analyzer.orchestration.extraction_workflow.Path")
 def test_extraction_workflow_run_uses_config(mock_path_class, mock_app_config, mock_extraction_components):
-    """Test that the run method uses the config correctly"""
-    
+    """Test that the run method uses the config correctly and filters files by extension"""
+
     # Setup mock to simulate directory existence check
     mock_path_instance = MagicMock()
     mock_path_instance.is_dir.return_value = True
-    mock_path_instance.rglob.return_value = []  # No files to process
-    mock_path_class.return_value = mock_path_instance
     
+    # Mock files with different extensions and types
+    mock_files = [
+        MagicMock(spec=Path, name="file1.sql"),
+        MagicMock(spec=Path, name="file2.txt"),
+        MagicMock(spec=Path, name="dir.sql"),
+    ]
+    # Configure mock file properties
+    mock_files[0].suffix = ".sql"
+    mock_files[0].is_file.return_value = True
+    mock_files[0].resolve.return_value.is_relative_to.return_value = True
+
+    mock_files[1].suffix = ".txt"
+    mock_files[1].is_file.return_value = True
+    mock_files[1].resolve.return_value.is_relative_to.return_value = True
+
+    mock_files[2].suffix = ".sql"
+    mock_files[2].is_file.return_value = False
+    mock_files[2].resolve.return_value.is_relative_to.return_value = True
+
+    mock_path_instance.rglob.return_value = mock_files
+    mock_path_class.return_value = mock_path_instance
+
     # Create the workflow
     workflow = ExtractionWorkflow(
         config=mock_app_config,
         **mock_extraction_components
     )
     
+    # Mock _process_single_file to avoid actual processing logic
+    workflow._process_single_file = MagicMock()
+
     # Run the workflow
     workflow.run()
     
     # Verify config was used to check source directory
     mock_path_class.assert_called_once_with(mock_app_config.source_code_root_dir)
     
-    # Verify directory traversal was started
-    mock_path_instance.rglob.assert_called_with("*")
+    # Verify directory traversal was started exactly once
+    mock_path_instance.rglob.assert_called_once_with("*")
+
+    # Verify that only the valid .sql file was processed
+    workflow._process_single_file.assert_called_once_with(mock_files[0])
 
 def test_extraction_workflow_process_single_file_uses_config(mock_app_config, mock_extraction_components):
     """Test that _process_single_file uses the config correctly"""

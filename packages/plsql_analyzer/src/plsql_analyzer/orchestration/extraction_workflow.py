@@ -251,13 +251,20 @@ class ExtractionWorkflow:
 
         # Normalize extensions once: ensure leading dot and lower case for efficient lookup
         extensions = {f".{ext.lower().lstrip('.')}" for ext in self.config.file_extensions_to_include}
-        self.logger.info(f"Searching for files with extensions: {', '.join(extensions)}")
+
+        if not extensions:
+            self.logger.warning("No file extensions configured for inclusion. Skipping discovery.")
+            return
+
+        self.logger.info(f"Searching for files with extensions: {', '.join(sorted(extensions))}")
 
         # Single traversal of the directory tree, filtering by extension in memory
         files_to_process = []
         for fpath in source_folder.rglob("*"):
             if fpath.suffix.lower() in extensions and fpath.is_file():
-                files_to_process.append(fpath)
+                # Security: Ensure the resolved path is within the source folder to prevent symlink attacks
+                if fpath.resolve().is_relative_to(source_folder):
+                    files_to_process.append(fpath)
 
         if not files_to_process:
             self.logger.warning("No files found to process. Exiting workflow.")
