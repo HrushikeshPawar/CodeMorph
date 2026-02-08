@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Performance optimization: Moved regex compilation outside the loop in `calculate_node_complexity_metrics` in `analyzer.py`.
+- Performance optimization: Optimized `generate_subgraph_for_node` by replacing inefficient nested loops with direct neighbor lookups, significantly reducing subgraph generation time for large graphs.
 
 ## [v0.1.0] - 2025-05-28
 

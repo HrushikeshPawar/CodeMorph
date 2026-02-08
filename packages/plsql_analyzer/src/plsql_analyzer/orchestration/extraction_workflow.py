@@ -152,7 +152,6 @@ class ExtractionWorkflow:
                 actual_object_name = obj_structural_props.get("name_raw", obj_key_name) # From structural parser
                 obj_params = []
                 obj_return_type = None
-                obj_signature_raw_text = None
                 
                 if parsed_signature_data:
                     actual_object_name_from_sig = parsed_signature_data.get("proc_name") or parsed_signature_data.get("func_name")
@@ -160,7 +159,6 @@ class ExtractionWorkflow:
                         actual_object_name = actual_object_name_from_sig.strip().replace("\"", "")
                     obj_params = parsed_signature_data.get("params", [])
                     obj_return_type = parsed_signature_data.get("return_type")
-                    obj_signature_raw_text = parsed_signature_data.get("raw_text")
                     obj_log_ctx.info(f"Signature parsed for {actual_object_name}: {len(obj_params)} params, Return: {obj_return_type is not None}")
                 else:
                     obj_log_ctx.warning(f"Signature parsing failed or yielded no data for {obj_key_name}. Using structural info.")
@@ -208,7 +206,7 @@ class ExtractionWorkflow:
                         parsed_parameters=obj_params,
                         parsed_return_type=obj_return_type,
                         extracted_calls=extracted_calls,
-                        signature_raw_text=obj_signature_raw_text,
+                        # signature_raw_text=None, # TODO: extract signature text if needed
                         start_line=obj_structural_props["start"],
                         end_line=obj_structural_props["end"]
                     )
