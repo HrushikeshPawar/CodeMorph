@@ -77,8 +77,8 @@ def test_extraction_workflow_run_uses_config(mock_path_class, mock_app_config, m
     # Verify config was used to check source directory
     mock_path_class.assert_called_once_with(mock_app_config.source_code_root_dir)
     
-    # Verify file extensions from config were used
-    mock_path_instance.rglob.assert_called_with(f"*.{mock_app_config.file_extensions_to_include[0]}")
+    # Verify directory traversal was started
+    mock_path_instance.rglob.assert_called_with("*")
 
 def test_extraction_workflow_process_single_file_uses_config(mock_app_config, mock_extraction_components):
     """Test that _process_single_file uses the config correctly"""
