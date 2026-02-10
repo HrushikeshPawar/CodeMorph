@@ -54,6 +54,10 @@ class GraphConstructor:
         # List of call names that are ambiguous or conflicting at a global level
         self._skip_call_names: List[str] = []  # global skip list
 
+        # Optimization: Map suffix to list of PLSQL_CodeObject for fast lookups
+        # e.g. "pkg.proc" -> [obj1, obj2] if obj1 has "schema1.pkg.proc" and obj2 has "schema2.pkg.proc"
+        self._suffix_lookup: Dict[str, List[PLSQL_CodeObject]] = {}
+
         self.logger.info(f"GraphConstructor initialized with {len(code_objects)} code objects.")
 
     def _register_globally(self, call_name_to_register: str, current_codeobject: PLSQL_CodeObject):
@@ -276,6 +280,21 @@ class GraphConstructor:
                 self.logger.info(f"Reclassifying '{call_name}' (object: {single_obj.id}) from invalid overload set to normal global map.")
                 self._code_object_call_names[call_name] = single_obj
 
+        # 4. Populate suffix lookup for O(1) resolution
+        self.logger.debug("Populating suffix lookup table.")
+        self._suffix_lookup.clear()
+        for call_name, obj in self._code_object_call_names.items():
+            parts = call_name.split('.')
+            # Create suffixes that contain at least one dot (excluding the full name itself if handled by direct lookup)
+            # e.g., for A.B.C: "B.C" is added. "C" is skipped (no dot). "A.B.C" is skipped (full name).
+            # Loop range: 1 to len(parts) - 2 (inclusive)
+            # If len=3 (A.B.C): range(1, 2) -> i=1 -> parts[1:] = B.C
+            for i in range(1, len(parts) - 1):
+                suffix = ".".join(parts[i:])
+                if suffix not in self._suffix_lookup:
+                    self._suffix_lookup[suffix] = []
+                self._suffix_lookup[suffix].append(obj)
+
         self.logger.info("Lookup structures initialized.")
         if self._skip_call_names:
             unique_skipped_names = sorted(list(set(self._skip_call_names)))
@@ -411,11 +430,10 @@ class GraphConstructor:
 
         # 1.4 Try abbreviated FQN suffix match (e.g. 'logger_pkg.log_error' -> 'schema_util_common.logger_pkg.log_error')
         if not resolved_object and '.' in dep_call_name:
-            suffix = f".{dep_call_name}"
-            suffix_matches = [(name, obj) for name, obj in self._code_object_call_names.items() if name.endswith(suffix)]
-            if len(suffix_matches) == 1:
-                _, obj = suffix_matches[0]
-                resolved_object = obj
+            # Optimized O(1) lookup
+            suffix_matches = self._suffix_lookup.get(dep_call_name)
+            if suffix_matches and len(suffix_matches) == 1:
+                resolved_object = suffix_matches[0]
                 self.logger.trace(f"Call '{dep_call_name}' resolved via global suffix match to: {resolved_object.id}")
 
         if resolved_object:
