@@ -111,6 +111,8 @@ class ExtractionWorkflow:
             return
 
         file_level_processing_error_occurred = False
+        extracted_code_objects_info = []
+
         for obj_key_name, list_of_obj_occurrences in structurally_parsed_objects.items():
             is_overloaded_structurally = len(list_of_obj_occurrences) > 1
             
@@ -212,18 +214,25 @@ class ExtractionWorkflow:
                     )
                     code_obj_instance.generate_id() # Crucial: ID generation
                     
-                    if self.db_manager.add_codeobject(code_obj_instance, str(processed_fpath)):
-                        obj_log_ctx.success(f"Successfully extracted and stored: {code_obj_instance.id}")
-                        self.total_objects_extracted +=1
-                    else:
-                        obj_log_ctx.error(f"Failed to store extracted object {code_obj_instance.id} to DB.")
-                        self.total_objects_failed_db_add +=1
+                    extracted_code_objects_info.append((code_obj_instance, obj_log_ctx))
                         
                 except Exception as e:
-                    obj_log_ctx.exception(f"Failed to create or store PLSQL_CodeObject for {actual_object_name}: {str(e)}")
+                    obj_log_ctx.exception(f"Failed to create PLSQL_CodeObject for {actual_object_name}: {str(e)}")
                     self.total_objects_failed_db_add +=1 # Count this as a DB add failure generally
                     file_level_processing_error_occurred = True
         
+        # Batch insert extracted objects
+        if extracted_code_objects_info:
+            code_objects_to_insert = [item[0] for item in extracted_code_objects_info]
+            if self.db_manager.add_codeobjects_batch(code_objects_to_insert, str(processed_fpath)):
+                for code_obj, log_ctx in extracted_code_objects_info:
+                    log_ctx.success(f"Successfully extracted and stored: {code_obj.id}")
+                    self.total_objects_extracted += 1
+            else:
+                self.logger.error(f"Failed to batch insert {len(code_objects_to_insert)} objects for {fpath.name}")
+                self.total_objects_failed_db_add += len(code_objects_to_insert)
+                file_level_processing_error_occurred = True
+
         # After attempting to process all objects in the file:
         if file_level_processing_error_occurred:
             self.logger.warning(f"Due to processing errors in {fpath.name}, attempting to remove its record from the database.")

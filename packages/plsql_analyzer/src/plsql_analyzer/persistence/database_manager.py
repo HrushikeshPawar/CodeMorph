@@ -195,6 +195,52 @@ class DatabaseManager:
             self.logger.error(f"Database transaction failed for {obj_repr_for_log} (ID: {codeobject.id})")
             self.logger.exception(e)
             return False
+
+    def add_codeobjects_batch(self, codeobjects: list['PLSQL_CodeObject'], fpath: str) -> bool:
+        """Batch insert multiple code objects into the database."""
+        if not codeobjects:
+            return True
+
+        self.logger.debug(f"Adding {len(codeobjects)} codeobjects for file {fpath}")
+        now_ts = datetime.now(timezone.utc)
+
+        # Prepare data outside the transaction
+        data_to_insert = []
+        for codeobject in codeobjects:
+            if not codeobject.id:
+                self.logger.error(f"Code object {codeobject.name} has no ID. Skipping in batch.")
+                continue
+
+            code_obj_dict_for_db = codeobject.to_dict()
+            data_to_insert.append((
+                codeobject.id,
+                str(fpath),
+                codeobject.package_name,
+                codeobject.name,
+                codeobject.type.value.upper(),
+                json.dumps(code_obj_dict_for_db),
+                now_ts
+            ))
+
+        if not data_to_insert:
+            return True
+
+        try:
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """INSERT OR REPLACE INTO Extracted_PLSQL_CodeObjects
+                       (id, file_path, package_name, object_name, object_type, codeobject_data, processing_ts)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    data_to_insert
+                )
+                conn.commit()
+                self.logger.debug(f"Batch inserted/replaced {len(data_to_insert)} objects for {fpath}")
+                return True
+        except sqlite3.Error as e:
+            self.logger.error(f"Database transaction failed for batch insert of {len(codeobjects)} objects for {fpath}")
+            self.logger.exception(e)
+            return False
             
     def get_all_codeobjects(self) -> list[dict]:
         """Retrieves all code objects from the database."""
