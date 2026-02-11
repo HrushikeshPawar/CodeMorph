@@ -111,6 +111,8 @@ class ExtractionWorkflow:
             return
 
         file_level_processing_error_occurred = False
+        objects_to_store = [] # Accumulate objects for bulk insert
+
         for obj_key_name, list_of_obj_occurrences in structurally_parsed_objects.items():
             is_overloaded_structurally = len(list_of_obj_occurrences) > 1
             
@@ -212,17 +214,27 @@ class ExtractionWorkflow:
                     )
                     code_obj_instance.generate_id() # Crucial: ID generation
                     
-                    if self.db_manager.add_codeobject(code_obj_instance, str(processed_fpath)):
-                        obj_log_ctx.success(f"Successfully extracted and stored: {code_obj_instance.id}")
-                        self.total_objects_extracted +=1
-                    else:
-                        obj_log_ctx.error(f"Failed to store extracted object {code_obj_instance.id} to DB.")
-                        self.total_objects_failed_db_add +=1
+                    objects_to_store.append(code_obj_instance)
                         
                 except Exception as e:
-                    obj_log_ctx.exception(f"Failed to create or store PLSQL_CodeObject for {actual_object_name}: {str(e)}")
-                    self.total_objects_failed_db_add +=1 # Count this as a DB add failure generally
+                    obj_log_ctx.exception(f"Failed to create PLSQL_CodeObject for {actual_object_name}: {str(e)}")
+                    self.total_objects_failed_db_add +=1 # Count this as a DB add failure generally (though now it's creation failure)
                     file_level_processing_error_occurred = True
+
+        # Perform Bulk Insert
+        if objects_to_store:
+            count_stored = self.db_manager.bulk_add_codeobjects(objects_to_store, str(processed_fpath))
+            self.total_objects_extracted += count_stored
+
+            # Since bulk insert is all-or-nothing per batch (conceptually, though executemany iterates),
+            # if count_stored < len(objects_to_store), some failed.
+            if count_stored < len(objects_to_store):
+                self.logger.error(f"Failed to store some objects for file {fpath}. Attempted: {len(objects_to_store)}, Stored: {count_stored}")
+                self.total_objects_failed_db_add += (len(objects_to_store) - count_stored)
+                file_level_processing_error_occurred = True
+            else:
+                 self.logger.success(f"Successfully bulk stored {count_stored} objects for {fpath}")
+
         
         # After attempting to process all objects in the file:
         if file_level_processing_error_occurred:

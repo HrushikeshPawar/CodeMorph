@@ -4,7 +4,7 @@ import sqlite3
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 import loguru as lg # Assuming logger is passed
 
 if TYPE_CHECKING:
@@ -195,6 +195,56 @@ class DatabaseManager:
             self.logger.error(f"Database transaction failed for {obj_repr_for_log} (ID: {codeobject.id})")
             self.logger.exception(e)
             return False
+
+    def bulk_add_codeobjects(self, code_objects: List['PLSQL_CodeObject'], fpath: str) -> int:
+        """
+        Adds multiple code objects to the database in a single transaction.
+        Returns the number of successfully inserted objects.
+        """
+        if not code_objects:
+            return 0
+
+        self.logger.debug(f"Bulk adding {len(code_objects)} code objects for file {fpath}")
+        now_ts = datetime.now(timezone.utc)
+
+        objects_data = []
+        for codeobject in code_objects:
+            if not codeobject.id:
+                 self.logger.error(f"Code object {codeobject.name} has no ID. Skipping.")
+                 continue
+
+            code_obj_dict_for_db = codeobject.to_dict()
+
+            objects_data.append((
+                codeobject.id,
+                str(fpath),
+                codeobject.package_name,
+                codeobject.name,
+                codeobject.type.value.upper(),
+                json.dumps(code_obj_dict_for_db, indent=None), # Use None for compact JSON
+                now_ts
+            ))
+
+        if not objects_data:
+            return 0
+
+        try:
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """INSERT OR REPLACE INTO Extracted_PLSQL_CodeObjects
+                       (id, file_path, package_name, object_name, object_type, codeobject_data, processing_ts)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    objects_data
+                )
+                conn.commit()
+                count = cursor.rowcount
+                self.logger.info(f"Successfully bulk inserted {count} objects for {fpath}")
+                return count
+        except sqlite3.Error as e:
+            self.logger.error(f"Bulk insert failed for {fpath}")
+            self.logger.exception(e)
+            return 0
             
     def get_all_codeobjects(self) -> list[dict]:
         """Retrieves all code objects from the database."""
