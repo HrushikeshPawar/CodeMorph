@@ -54,6 +54,10 @@ class GraphConstructor:
         # List of call names that are ambiguous or conflicting at a global level
         self._skip_call_names: List[str] = []  # global skip list
 
+        # Suffix index for optimized lookup
+        # Maps a suffix (e.g. 'pkg.proc') to a list of matching code objects
+        self._suffix_lookup: Dict[str, List[PLSQL_CodeObject]] = {}
+
         self.logger.info(f"GraphConstructor initialized with {len(code_objects)} code objects.")
 
     def _register_globally(self, call_name_to_register: str, current_codeobject: PLSQL_CodeObject):
@@ -276,6 +280,21 @@ class GraphConstructor:
                 self.logger.info(f"Reclassifying '{call_name}' (object: {single_obj.id}) from invalid overload set to normal global map.")
                 self._code_object_call_names[call_name] = single_obj
 
+        # 4. Build suffix index for efficient lookup
+        self.logger.debug("Building suffix index for efficient lookups...")
+        self._suffix_lookup.clear()
+        for name, obj in self._code_object_call_names.items():
+            parts = name.split('.')
+            # Generate all suffixes: from 1 part to N-1 parts
+            # e.g. a.b.c -> b.c (suffix .b.c), c (suffix .c)
+            # The query logic uses suffix = f".{dep_call_name}" and checks name.endswith(suffix).
+            # This is equivalent to checking if dep_call_name is one of the suffixes constructed by joining parts[i:].
+            for i in range(1, len(parts)):
+                suffix_key = ".".join(parts[i:])
+                # Only index if suffix contains a dot, as the query logic requires '.' in dep_call_name
+                if '.' in suffix_key:
+                    self._suffix_lookup.setdefault(suffix_key, []).append(obj)
+
         self.logger.info("Lookup structures initialized.")
         if self._skip_call_names:
             unique_skipped_names = sorted(list(set(self._skip_call_names)))
@@ -411,11 +430,9 @@ class GraphConstructor:
 
         # 1.4 Try abbreviated FQN suffix match (e.g. 'logger_pkg.log_error' -> 'schema_util_common.logger_pkg.log_error')
         if not resolved_object and '.' in dep_call_name:
-            suffix = f".{dep_call_name}"
-            suffix_matches = [(name, obj) for name, obj in self._code_object_call_names.items() if name.endswith(suffix)]
-            if len(suffix_matches) == 1:
-                _, obj = suffix_matches[0]
-                resolved_object = obj
+            potential_matches = self._suffix_lookup.get(dep_call_name, [])
+            if len(potential_matches) == 1:
+                resolved_object = potential_matches[0]
                 self.logger.trace(f"Call '{dep_call_name}' resolved via global suffix match to: {resolved_object.id}")
 
         if resolved_object:
