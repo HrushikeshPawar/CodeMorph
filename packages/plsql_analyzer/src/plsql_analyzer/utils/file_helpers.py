@@ -44,7 +44,7 @@ class FileHelpers:
         try:
             new_fpath_parts = []
             # Normalize exclusion list to lowercase for case-insensitive comparison
-            exclude_from_path_lower = [x.casefold() for x in exclude_from_path]
+            exclude_from_path_lower = {x.casefold() for x in exclude_from_path}
 
             # Iterate through each part of the original file path
             for part in fpath.parts:
@@ -94,7 +94,7 @@ class FileHelpers:
         self.logger.trace(f"Deriving package name for file '{fpath}'. Initial package from code: '{package_name_from_code}'. Excluding path parts: {exclude_parts_for_pkg_derivation}. File extensions: {file_extensions}")
 
         # Normalize exclusion parts to lowercase for case-insensitive comparison
-        exclude_parts_lower = [part.casefold() for part in exclude_parts_for_pkg_derivation]
+        exclude_parts_lower = {part.casefold() for part in exclude_parts_for_pkg_derivation}
 
         # 1. Collect path-derived components (stripped, original case)
         # These are potential prefixes to be added to the package name.
@@ -158,19 +158,22 @@ class FileHelpers:
         # 3. Prepend path-derived components if they are not already present (case-insensitively)
         #    Iterate in reverse to prepend correctly (e.g., 'folder', 'subfolder' -> 'folder.subfolder')
         package_components = []
+        package_components_set = set()
         for path_component_orig_case in reversed(derived_path_components_original_case):
             path_component_casefolded = path_component_orig_case.casefold()
             
-            if path_component_casefolded not in package_components:
+            if path_component_casefolded not in package_components_set:
                 # Prepend the component for joining
                 package_components.append(path_component_casefolded)
-                self.logger.trace(f"Prepended path component '{path_component_orig_case}'. Current ordered parts: {seen_components}")
+                package_components_set.add(path_component_casefolded)
+                self.logger.trace(f"Prepended path component '{path_component_orig_case}'. Current ordered parts: {package_components}")
             else:
                 self.logger.trace(f"Path component '{path_component_orig_case}' (casefolded '{path_component_casefolded}') already effectively present, skipping.")
         
         for comp in seen_components:
-            if comp not in package_components:
+            if comp not in package_components_set:
                 package_components.append(comp)
+                package_components_set.add(comp)
                 self.logger.trace(f"Added component '{comp}' to seen components.")
         
         # 4. Join to form the final package name string and then casefold it for consistent output.
