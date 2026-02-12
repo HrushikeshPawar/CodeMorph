@@ -235,7 +235,7 @@ class ExtractionWorkflow:
                         else:
                             self.logger.error(f"Failed to store extracted object {co.id} to DB.")
                             self.total_objects_failed_db_add +=1
-                    except Exception as e_inner:
+                    except sqlite3.Error as e_inner:
                          self.logger.error(f"Exception during fallback insert for {co.name}: {e_inner}")
                          self.total_objects_failed_db_add +=1
 
