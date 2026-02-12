@@ -215,10 +215,8 @@ class ExtractionWorkflow:
                     file_code_objects.append(code_obj_instance)
                         
                 except Exception as e:
-                    obj_log_ctx.exception(
-                        f"Failed to construct PLSQL_CodeObject for {actual_object_name}: {e}"
-                    )
-                    self.total_objects_failed_db_add += 1  # Count this as a failure preventing DB insert
+                    obj_log_ctx.exception(f"Failed to create or store PLSQL_CodeObject for {actual_object_name}: {str(e)}")
+                    self.total_objects_failed_db_add +=1 # Count this as a DB add failure generally
                     file_level_processing_error_occurred = True
         
         # Batch Insert with Fallback
@@ -227,7 +225,7 @@ class ExtractionWorkflow:
                 count = self.db_manager.add_codeobjects_batch(file_code_objects, str(processed_fpath))
                 self.logger.success(f"Successfully batch stored {count} objects for {fpath.name}")
                 self.total_objects_extracted += count
-            except sqlite3.Error as e:
+            except Exception as e:
                 self.logger.warning(f"Batch insert failed for {fpath.name}. Retrying individually. Error: {e}")
                 for co in file_code_objects:
                     try:
@@ -237,7 +235,7 @@ class ExtractionWorkflow:
                         else:
                             self.logger.error(f"Failed to store extracted object {co.id} to DB.")
                             self.total_objects_failed_db_add +=1
-                    except sqlite3.Error as e_inner:
+                    except Exception as e_inner:
                          self.logger.error(f"Exception during fallback insert for {co.name}: {e_inner}")
                          self.total_objects_failed_db_add +=1
 
