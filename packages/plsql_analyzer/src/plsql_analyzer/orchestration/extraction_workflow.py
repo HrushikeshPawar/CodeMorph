@@ -225,7 +225,7 @@ class ExtractionWorkflow:
                 count = self.db_manager.add_codeobjects_batch(file_code_objects, str(processed_fpath))
                 self.logger.success(f"Successfully batch stored {count} objects for {fpath.name}")
                 self.total_objects_extracted += count
-            except Exception as e:
+            except sqlite3.Error as e:
                 self.logger.warning(f"Batch insert failed for {fpath.name}. Retrying individually. Error: {e}")
                 for co in file_code_objects:
                     try:
