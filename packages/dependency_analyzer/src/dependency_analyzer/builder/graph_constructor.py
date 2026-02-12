@@ -45,6 +45,8 @@ class GraphConstructor:
         # Internal lookup structures, populated by _initialize_lookup_structures
         # Maps a globally resolvable call name to a single PLSQL_CodeObject (non-overloaded)
         self._code_object_call_names: Dict[str, PLSQL_CodeObject] = {}
+        # Maps a suffix to a list of matching non-overloaded PLSQL_CodeObject instances
+        self._suffix_index: Dict[str, List[PLSQL_CodeObject]] = {}
         # Maps a globally resolvable call name to a set of overloaded PLSQL_CodeObject instances
         self._overloaded_code_object_call_names: Dict[str, Set[PLSQL_CodeObject]] = {}
         # Maps package name to its local objects (simple name or intermediate -> object/set)
@@ -276,10 +278,32 @@ class GraphConstructor:
                 self.logger.info(f"Reclassifying '{call_name}' (object: {single_obj.id}) from invalid overload set to normal global map.")
                 self._code_object_call_names[call_name] = single_obj
 
+        self._build_suffix_index()
         self.logger.info("Lookup structures initialized.")
         if self._skip_call_names:
             unique_skipped_names = sorted(list(set(self._skip_call_names)))
             self.logger.warning(f"Skipped {len(unique_skipped_names)} unique ambiguous/conflicting global call name(s): {unique_skipped_names}")
+
+    def _build_suffix_index(self):
+        """
+        Builds a reverse index for suffix matching.
+        Maps 'suffix' -> [List of CodeObjects whose names end with .suffix]
+        Only considers suffixes containing a dot.
+        """
+        self._suffix_index.clear()
+        for name, obj in self._code_object_call_names.items():
+            parts = name.split('.')
+            # valid suffixes must be shorter than name and contain at least one dot
+            # This aligns with the query check `if '.' in dep_call_name`.
+            # Example: name="a.b.c", parts=["a", "b", "c"]
+            # Suffixes: "b.c" (parts[1:]) - valid
+            # "c" (parts[2:]) - invalid (no dot)
+            if len(parts) >= 3:
+                for i in range(1, len(parts) - 1):
+                    suffix_key = ".".join(parts[i:])
+                    if suffix_key not in self._suffix_index:
+                        self._suffix_index[suffix_key] = []
+                    self._suffix_index[suffix_key].append(obj)
 
     def _add_nodes_to_graph(self):
         """Adds all processed PLSQL_CodeObject instances as nodes to the dependency graph with structure-only attributes."""
@@ -411,11 +435,9 @@ class GraphConstructor:
 
         # 1.4 Try abbreviated FQN suffix match (e.g. 'logger_pkg.log_error' -> 'schema_util_common.logger_pkg.log_error')
         if not resolved_object and '.' in dep_call_name:
-            suffix = f".{dep_call_name}"
-            suffix_matches = [(name, obj) for name, obj in self._code_object_call_names.items() if name.endswith(suffix)]
+            suffix_matches = self._suffix_index.get(dep_call_name, [])
             if len(suffix_matches) == 1:
-                _, obj = suffix_matches[0]
-                resolved_object = obj
+                resolved_object = suffix_matches[0]
                 self.logger.trace(f"Call '{dep_call_name}' resolved via global suffix match to: {resolved_object.id}")
 
         if resolved_object:
