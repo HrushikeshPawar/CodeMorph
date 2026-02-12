@@ -215,8 +215,10 @@ class ExtractionWorkflow:
                     file_code_objects.append(code_obj_instance)
                         
                 except Exception as e:
-                    obj_log_ctx.exception(f"Failed to create or store PLSQL_CodeObject for {actual_object_name}: {str(e)}")
-                    self.total_objects_failed_db_add +=1 # Count this as a DB add failure generally
+                    obj_log_ctx.exception(
+                        f"Failed to construct PLSQL_CodeObject for {actual_object_name}: {e}"
+                    )
+                    self.total_objects_failed_db_add += 1  # Count this as a failure preventing DB insert
                     file_level_processing_error_occurred = True
         
         # Batch Insert with Fallback
