@@ -44,7 +44,7 @@ class FileHelpers:
         try:
             new_fpath_parts = []
             # Normalize exclusion list to lowercase for case-insensitive comparison
-            exclude_from_path_lower = {x.casefold() for x in exclude_from_path}
+            exclude_from_path_lower = [x.casefold() for x in exclude_from_path]
 
             # Iterate through each part of the original file path
             for part in fpath.parts:
