@@ -166,7 +166,7 @@ class FileHelpers:
                 # Prepend the component for joining
                 package_components.append(path_component_casefolded)
                 package_components_set.add(path_component_casefolded)
-                self.logger.trace(f"Prepended path component '{path_component_orig_case}'. Current ordered parts: {seen_components}")
+                self.logger.trace(f"Prepended path component '{path_component_orig_case}'. Current ordered parts: {package_components}")
             else:
                 self.logger.trace(f"Path component '{path_component_orig_case}' (casefolded '{path_component_casefolded}') already effectively present, skipping.")
         
