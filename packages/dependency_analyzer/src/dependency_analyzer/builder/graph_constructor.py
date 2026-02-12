@@ -298,12 +298,9 @@ class GraphConstructor:
             # Example: name="a.b.c", parts=["a", "b", "c"]
             # Suffixes: "b.c" (parts[1:]) - valid
             # "c" (parts[2:]) - invalid (no dot)
-            if len(parts) >= 3:
-                for i in range(1, len(parts) - 1):
-                    suffix_key = ".".join(parts[i:])
-                    if suffix_key not in self._suffix_index:
-                        self._suffix_index[suffix_key] = []
-                    self._suffix_index[suffix_key].append(obj)
+            for i in range(1, len(parts) - 1):
+                suffix_key = ".".join(parts[i:])
+                self._suffix_index.setdefault(suffix_key, []).append(obj)
 
     def _add_nodes_to_graph(self):
         """Adds all processed PLSQL_CodeObject instances as nodes to the dependency graph with structure-only attributes."""
