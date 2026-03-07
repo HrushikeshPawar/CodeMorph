@@ -195,7 +195,52 @@ class DatabaseManager:
             self.logger.error(f"Database transaction failed for {obj_repr_for_log} (ID: {codeobject.id})")
             self.logger.exception(e)
             return False
+
+    def add_codeobjects_batch(self, codeobjects: list['PLSQL_CodeObject'], fpath: str) -> int:
+        """Adds a batch of code objects to the database using a single transaction."""
+        if not codeobjects:
+            return 0
+
+        self.logger.debug(f"Adding batch of {len(codeobjects)} code objects for file {fpath}")
+        now_ts = datetime.now(timezone.utc)
+
+        objects_data = []
+        for co in codeobjects:
+            if not co.id:
+                 self.logger.error(f"Code object {co.name} has no ID. Skipping in batch.")
+                 continue
+
+            code_obj_dict_for_db = co.to_dict()
+            objects_data.append((
+                co.id,
+                str(fpath),
+                co.package_name,
+                co.name,
+                co.type.value.upper(),
+                json.dumps(code_obj_dict_for_db, indent=None), # Compact JSON
+                now_ts
+            ))
             
+        if not objects_data:
+            return 0
+
+        try:
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """INSERT OR REPLACE INTO Extracted_PLSQL_CodeObjects
+                       (id, file_path, package_name, object_name, object_type, codeobject_data, processing_ts)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    objects_data
+                )
+                conn.commit()
+                self.logger.debug(f"Successfully inserted batch of {len(objects_data)} objects for {fpath}")
+                return len(objects_data)
+        except sqlite3.Error as e:
+            self.logger.error(f"Database batch transaction failed for {fpath}")
+            self.logger.exception(e)
+            raise # Re-raise to allow caller to handle fallback
+
     def get_all_codeobjects(self) -> list[dict]:
         """Retrieves all code objects from the database."""
         self.logger.debug("Fetching all code objects from database.")
