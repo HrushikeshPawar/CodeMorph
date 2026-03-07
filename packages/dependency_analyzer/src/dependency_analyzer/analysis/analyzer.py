@@ -466,19 +466,11 @@ def calculate_node_complexity_metrics(
         return graph
 
     # Decision-point keywords for ACC (case-insensitive, word boundaries)
-    # Only count 'if', 'case', 'loop' not preceded by 'end' (with optional whitespace)
-    # Python's regex lookbehind must be fixed-width, so we can't use (?<!end\s*)
-    # Instead, match all, then filter out those preceded by 'end' and whitespace in post-processing
-    keywords = [r'\bif\b', r'\belsif\b', r'\bcase\b', r'\bwhen\b', r'\bloop\b', r'\bfor\b', r'\bwhile\b', r'\bexception\b', r'\bthen\b']
-    acc_pattern = re.compile('|'.join(keywords), re.IGNORECASE)
-    end_pattern = re.compile(r'end\s*$', re.IGNORECASE)
-
-    def is_false_positive(match, clean_code):
-        # Get up to 10 chars before the match
-        start = match.start()
-        before = clean_code[max(0, start-10):start]
-        # Check for 'end' followed by whitespace right before the keyword
-        return bool(end_pattern.search(before))
+    # Only count 'if', 'case', 'loop', etc. not preceded by 'end' (with optional whitespace)
+    # We use a single regex to catch both the keyword and the optional 'end' prefix
+    # to avoid expensive string slicing and repeated regex searches.
+    keywords = [r'if', r'elsif', r'case', r'when', r'loop', r'for', r'while', r'exception']
+    acc_pattern = re.compile(rf'\b(end\s+)?({"|".join(keywords)})\b', re.IGNORECASE)
 
     logger.info(f"Calculating complexity metrics for {graph.number_of_nodes()} nodes...")
     
@@ -500,8 +492,8 @@ def calculate_node_complexity_metrics(
             num_calls_made = 0
         # Approximate Cyclomatic Complexity (ACC)
         if obj.clean_code:
-            matches = list(acc_pattern.finditer(obj.clean_code))
-            acc_count = sum(1 for m in matches if not is_false_positive(m, obj.clean_code))
+            # If group 1 is None, it means the keyword was NOT preceded by 'end '
+            acc_count = sum(1 for m in acc_pattern.finditer(obj.clean_code) if m.group(1) is None)
             acc = acc_count + 1
         else:
             acc = 1

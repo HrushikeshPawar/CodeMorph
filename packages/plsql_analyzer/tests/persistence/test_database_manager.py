@@ -403,3 +403,61 @@ def test_remove_file_record_non_existent(initialized_db_manager: DatabaseManager
     assert initialized_db_manager.get_file_hash(fpath_existing) == hash_existing
     all_objects = initialized_db_manager.get_all_codeobjects()
     assert any(o["id"] == obj_existing.id for o in all_objects)
+
+def test_add_codeobjects_batch_success(initialized_db_manager: DatabaseManager, caplog):
+    """Test that batch adding code objects works correctly."""
+    fpath = "batch_file.sql"
+    initialized_db_manager.update_file_hash(fpath, "batch_hash")
+
+    obj1 = MockPLSQLCodeObject(id="batch_obj1", name="BatchObj1", obj_type=MockObjectType.PROCEDURE)
+    obj2 = MockPLSQLCodeObject(id="batch_obj2", name="BatchObj2", obj_type=MockObjectType.FUNCTION)
+
+    # We pass a list of MockPLSQLCodeObject, which mimics the real one enough for this test
+    # The signature expects PLSQL_CodeObject but Python is dynamic so it's fine for tests
+    count = initialized_db_manager.add_codeobjects_batch([obj1, obj2], fpath)
+    assert count == 2
+
+    # Check logs for success message
+    # Note: The log message might not be exact if there are other debug logs, but we look for the success one
+    # The actual log message in code is: "Successfully inserted batch of {len(objects_data)} objects for {fpath}"
+    assert f"Successfully inserted batch of 2 objects for {fpath}" in caplog.text
+
+    all_objects = initialized_db_manager.get_all_codeobjects()
+    # Since previous tests might have left objects if not cleaned up (fixture scope is function though),
+    # but initialized_db_manager fixture calls setup_database.
+    # Actually db_manager fixture uses temp_db_path which is function-scoped (tmp_path fixture).
+    # So DB is fresh for each test.
+    assert len(all_objects) == 2
+    ids = [o["id"] for o in all_objects]
+    assert "batch_obj1" in ids
+    assert "batch_obj2" in ids
+
+def test_add_codeobjects_batch_skips_missing_id(initialized_db_manager: DatabaseManager, caplog):
+    """Test that batch adding skips objects with missing IDs."""
+    fpath = "batch_skip_file.sql"
+    initialized_db_manager.update_file_hash(fpath, "batch_skip_hash")
+
+    obj1 = MockPLSQLCodeObject(id="valid_obj", name="ValidObj", obj_type=MockObjectType.PROCEDURE)
+    obj2 = MockPLSQLCodeObject(id=None, name="InvalidObj", obj_type=MockObjectType.FUNCTION)
+
+    count = initialized_db_manager.add_codeobjects_batch([obj1, obj2], fpath)
+    assert count == 1
+
+    # Check logs for error/skip message
+    assert f"Code object {obj2.name} has no ID. Skipping in batch." in caplog.text
+    assert f"Successfully inserted batch of 1 objects for {fpath}" in caplog.text
+
+    all_objects = initialized_db_manager.get_all_codeobjects()
+    assert len(all_objects) == 1
+    assert all_objects[0]["id"] == "valid_obj"
+
+def test_add_codeobjects_batch_empty(initialized_db_manager: DatabaseManager):
+    """Test that batch adding an empty list returns 0 and does nothing."""
+    fpath = "batch_empty_file.sql"
+    initialized_db_manager.update_file_hash(fpath, "batch_empty_hash")
+
+    count = initialized_db_manager.add_codeobjects_batch([], fpath)
+    assert count == 0
+
+    all_objects = initialized_db_manager.get_all_codeobjects()
+    assert len(all_objects) == 0
