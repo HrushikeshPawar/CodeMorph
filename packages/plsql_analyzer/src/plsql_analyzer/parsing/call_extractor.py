@@ -30,6 +30,8 @@ class CallDetailsTuple(NamedTuple):
 
 
 class CallDetailExtractor:
+    LITERAL_PATTERN = re.compile(r'<LITERAL_\d+>')
+
     def __init__(self, logger: lg.Logger, keywords_to_drop:List[str], strict_lpar_only_calls: bool = False):
         self.logger = logger.bind(parser_type="CallDetailExtractor")
         self.keywords_to_drop = {kw.upper() for kw in keywords_to_drop}
@@ -336,9 +338,9 @@ class CallDetailExtractor:
             return None  # Skip this "call" as it's actually an Oracle outer join operator
         
         # Restore literals
-        restored_positional_params = [re.sub(r'<LITERAL_\d+>', lambda match: self.literal_mapping.get(match.group(0), match.group(0)), p) for p in positional_params]
+        restored_positional_params = [self.LITERAL_PATTERN.sub(lambda match: self.literal_mapping.get(match.group(0), match.group(0)), p) for p in positional_params]
         restored_named_params = {
-            name: re.sub(r'<LITERAL_\d+>', lambda match: self.literal_mapping.get(match.group(0), match.group(0)), val)
+            name: self.LITERAL_PATTERN.sub(lambda match: self.literal_mapping.get(match.group(0), match.group(0)), val)
             for name, val in named_params.items()
         }
         
