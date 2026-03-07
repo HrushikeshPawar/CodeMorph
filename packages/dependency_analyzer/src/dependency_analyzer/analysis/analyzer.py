@@ -469,7 +469,7 @@ def calculate_node_complexity_metrics(
     # Only count 'if', 'case', 'loop', etc. not preceded by 'end' (with optional whitespace)
     # We use a single regex to catch both the keyword and the optional 'end' prefix
     # to avoid expensive string slicing and repeated regex searches.
-    keywords = [r'if', r'elsif', r'case', r'when', r'loop', r'for', r'while', r'exception', r'then']
+    keywords = [r'if', r'elsif', r'case', r'when', r'loop', r'for', r'while', r'exception']
     acc_pattern = re.compile(rf'\b(end\s+)?({"|".join(keywords)})\b', re.IGNORECASE)
 
     logger.info(f"Calculating complexity metrics for {graph.number_of_nodes()} nodes...")
