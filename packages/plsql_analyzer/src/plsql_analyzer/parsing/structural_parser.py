@@ -633,8 +633,9 @@ class PlSqlStructuralParser:
             return # Handled one-liner
 
         # --- Check for END Keyword --- #
-        if END_CHECK_REGEX.search(processed_line):
-            ends_found = len(END_CHECK_REGEX.findall(processed_line))
+        ends = END_CHECK_REGEX.findall(processed_line)
+        if ends:
+            ends_found = len(ends)
             self.logger.trace(f"L{self.line_num}: Found {ends_found} 'END' keyword(s) on the line.")
             for _ in range(ends_found):
                 if self.block_stack:
