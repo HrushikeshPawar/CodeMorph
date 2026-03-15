@@ -207,7 +207,7 @@ class ExtractionWorkflow:
                         parsed_parameters=obj_params,
                         parsed_return_type=obj_return_type,
                         extracted_calls=extracted_calls,
-                        # signature_raw_text=None, # TODO: extract signature text if needed
+                        signature_raw_text=parsed_signature_data.get("signature_raw_text") if parsed_signature_data else None,
                         start_line=obj_structural_props["start"],
                         end_line=obj_structural_props["end"]
                     )

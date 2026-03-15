@@ -17,11 +17,13 @@ class TestPLSQLSignatureParser:
         assert result is not None
         assert result["proc_name"] == "do_something"
         assert result["params"] == []
+        assert result["signature_raw_text"] == "PROCEDURE do_something IS"
 
     def test_procedure_with_in_param(self, parser: PLSQLSignatureParser):
         sig = "PROCEDURE process_data (p_id IN NUMBER) AS"
         result = parser.parse(sig)
         assert result["proc_name"] == "process_data"
+        assert result["signature_raw_text"] == "PROCEDURE process_data (p_id IN NUMBER) AS"
         assert len(result["params"]) == 1
         param = result["params"][0]
         assert param["name"] == "p_id"
