@@ -524,7 +524,7 @@ class PlSqlStructuralParser:
         if one_line_match:
 
             # Count keywords vs ENDs on the line
-            keywords = [keyword.casefold() for keyword in KEYWORDS_REQUIRING_END_REGEX.findall(processed_line)]
+            keywords = [keyword.lower() for keyword in KEYWORDS_REQUIRING_END_REGEX.findall(processed_line)]
             ends = END_CHECK_REGEX.findall(processed_line)
             self.logger.trace(f"L{self.line_num}: Found one-line block(s). Keywords: {keywords}, ENDs: {ends}.")
 
@@ -680,7 +680,7 @@ class PlSqlStructuralParser:
         # Use findall to catch multiple keywords on one line (e.g. IF condition THEN IF ...)
         keywords_found = KEYWORDS_REQUIRING_END_REGEX.findall(processed_line)
         if keywords_found:
-            current_keywords = [kw.casefold() for kw in keywords_found]
+            current_keywords = [kw.lower() for kw in keywords_found]
             self.logger.trace(f"L{self.line_num}: Keywords requiring END found: {current_keywords}")
 
             # Handle awaited LOOPs
