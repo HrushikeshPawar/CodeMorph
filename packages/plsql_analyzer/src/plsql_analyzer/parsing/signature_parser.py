@@ -273,11 +273,13 @@ class PLSQLSignatureParser:
             # Using scan_string to find the first match of a signature
             best_match = None
             best_match_len = 0
+            best_match_span = (0, 0)
             for toks, start, end in self.proc_or_func_signature.scan_string(clean_signature_text):
                 new_len = end - start
                 
                 if new_len >= best_match_len:
                     best_match = toks # Take the first (and likely only, for a single object's source)
+                    best_match_span = (start, end)
                     self.logger.trace(f"Found Signature match from {start} to {end}: {escape_angle_brackets(toks.as_dict())}")
 
             # parsed_dict = self.proc_or_func_signature.parse_string(clean_signature_text).as_dict()
@@ -302,6 +304,11 @@ class PLSQLSignatureParser:
                 # Ensure 'params' is always a list, even if empty
                 if "params" not in parsed_dict:
                     parsed_dict["params"] = []
+
+                # Extract and store the raw signature text
+                start, end = best_match_span
+                parsed_dict["signature_raw_text"] = clean_signature_text[start:end].strip()
+
                 return parsed_dict
             else:
                 self.logger.warning(f"No PL/SQL signature found or matched in the provided text: {escape_angle_brackets(signature_text[:200])}...")
