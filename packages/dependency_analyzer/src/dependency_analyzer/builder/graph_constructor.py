@@ -238,7 +238,7 @@ class GraphConstructor:
         invalid_overload_names_to_reclassify: Dict[str, PLSQL_CodeObject] = {}
         call_names_to_remove_from_overloaded_map: List[str] = []
 
-        for call_name, obj_set in list(self._overloaded_code_object_call_names.items()): # Iterate on a copy
+        for call_name, obj_set in self._overloaded_code_object_call_names.items():
             if len(obj_set) < 2:
                 self.logger.warning(
                     f"Global call name '{call_name}' is in the overloaded map but contains only {len(obj_set)} object(s) ({[obj.id for obj in obj_set]}). "
