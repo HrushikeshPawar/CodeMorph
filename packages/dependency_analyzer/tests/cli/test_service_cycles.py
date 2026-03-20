@@ -401,12 +401,12 @@ def test_save_table_as_text(mock_open: Mock, mocker, service_instance: CLIServic
 
 @patch("builtins.open", side_effect=IOError("Disk full"))
 def test_save_file_write_error(mocker, service_instance: CLIService, sample_cycles_data_no_details: List[Dict], tmp_path: Path):
+    # FIX: Patch print_success BEFORE calling the method
+    mock_print_success = mocker.patch('dependency_analyzer.cli.service.print_success')
+
     output_fname = "out"
     file_path = tmp_path / f"{output_fname}.json"
     service_instance.settings.project_root = tmp_path
-
-    # FIX: Patch print_success BEFORE calling the method
-    mock_print_success = mocker.patch('dependency_analyzer.cli.service.print_success')
 
     with pytest.raises(CLIError, match=f"Failed to save results to '{file_path}': Disk full"):
         service_instance._save_cycles_results(sample_cycles_data_no_details, str(tmp_path / output_fname), "json")
